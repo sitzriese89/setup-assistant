@@ -2,6 +2,8 @@
 name = "r3e-telemetry"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Reads RaceRoom's $R3E shared memory and turns it into setup-core samples"
 
 [dependencies]

@@ -96,3 +96,8 @@ For the overlay, run RaceRoom in borderless or windowed mode.
 Everything stays on your machine. The app reads the game's telemetry and saves recordings and
 track maps in `%APPDATA%\dev.simracing.setupassistant`; your session (problems, runs, changes)
 lives in the app's local storage. Nothing is uploaded.
+
+## License
+
+[MIT](LICENSE). RaceRoom is a trademark of its owners; this project isn't affiliated with or
+endorsed by KW Studios / Sector3 Studios.

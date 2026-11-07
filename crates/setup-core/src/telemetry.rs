@@ -739,6 +739,6 @@ fn cluster(distances: &[f32], radius: f32) -> Vec<Place> {
             seen_in_runs: 0,
         })
         .collect();
-    places.sort_by(|a, b| b.count.cmp(&a.count));
+    places.sort_by_key(|p| std::cmp::Reverse(p.count));
     places
 }

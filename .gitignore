@@ -1,0 +1,14 @@
+/target
+**/*.rs.bk
+
+# Tauri generated schemas
+app/src-tauri/gen/
+
+# Local recordings, if copied into the repo by accident
+*.csv
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

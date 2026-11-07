@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Setup Assistant</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="logo.svg" alt="" class="logo" />
+      <div>
+        <h1>Setup Assistant</h1>
+        <span class="game-pill">RaceRoom</span>
+      </div>
+    </div>
+
+    <div class="car-context">
+      <div class="field">
+        <span class="field-label">Drivetrain</span>
+        <div class="segmented" id="drivetrain">
+          <button data-value="rwd" class="active">RWD</button>
+          <button data-value="fwd">FWD</button>
+          <button data-value="awd">AWD</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">Downforce</span>
+        <div class="segmented" id="aero">
+          <button data-value="true" class="active">Aero car</button>
+          <button data-value="false">Little / none</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Left: describe the problem -->
+    <section class="panel builder">
+      <div class="tabs" id="tabs">
+        <button data-tab="describe" class="active">Describe it</button>
+        <button data-tab="live">Live telemetry <span class="live-dot" id="tab-dot"></span></button>
+      </div>
+
+      <!-- Live telemetry -->
+      <div id="tab-live" hidden>
+        <div class="live-head">
+          <div class="conn" id="conn"><span class="conn-dot"></span><span id="conn-text">Waiting for RaceRoom…</span></div>
+          <div class="live-actions">
+            <button class="ghost" id="demo-btn">Try demo lap</button>
+            <button class="ghost" id="reset-btn" title="Forget what was detected in this run">Reset run</button>
+          </div>
+        </div>
+
+        <div class="overlay-box" id="overlay-box">
+          <div>
+            <b>In-game overlay</b>
+            <span class="hint inline">Small always-on-top balance bar. Needs RaceRoom in borderless or windowed mode.</span>
+          </div>
+          <div class="live-actions">
+            <button class="ghost strong" id="overlay-btn">Show overlay</button>
+            <button class="ghost" id="overlay-lock" hidden>Lock (click-through)</button>
+          </div>
+        </div>
+
+        <div class="gauges">
+          <div class="gauge big"><span class="g-val" id="g-speed">–</span><span class="g-unit">km/h</span></div>
+          <div class="gauge big"><span class="g-val" id="g-gear">–</span><span class="g-unit">gear</span></div>
+          <div class="gauge pedals">
+            <div class="pedal"><div class="pedal-fill thr" id="g-thr"></div></div>
+            <div class="pedal"><div class="pedal-fill brk" id="g-brk"></div></div>
+            <span class="g-unit">thr / brk</span>
+          </div>
+          <div class="gauge phase"><span class="g-val small" id="g-phase">–</span><span class="g-unit" id="g-latg">corner phase</span></div>
+        </div>
+
+        <div class="balance">
+          <div class="balance-labels"><span>Understeer</span><span id="balance-text">Balance: learning your car…</span><span>Oversteer</span></div>
+          <div class="balance-bar"><div class="balance-mid"></div><div class="balance-needle" id="balance-needle"></div></div>
+        </div>
+
+        <h3 class="sub">Detected problems <span class="hint inline" id="drive-time"></span></h3>
+        <ul class="detected" id="detected"></ul>
+        <p class="hint" id="detected-empty">Drive a few laps. Problems show up here after they happen at least twice.</p>
+        <button class="primary small" id="add-all" hidden>Add all to my problems</button>
+
+        <h3 class="sub">Balance by corner phase <span class="hint inline">extra steering per g · + understeer, − oversteer</span></h3>
+        <table class="phase-balance" id="phase-balance">
+          <thead><tr><th></th><th>Slow corners</th><th>Fast corners</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="hint" id="phase-balance-empty">Fills in as you corner. After "Next run" the previous run is shown for comparison.</p>
+
+        <h3 class="sub">Track <span class="hint inline" id="track-status"></span></h3>
+        <div class="track-card" id="track-card" hidden>
+          <svg id="track-svg" viewBox="0 0 600 160" aria-label="Elevation profile"></svg>
+          <div class="track-legend">
+            <span><i class="lg-comp">▼</i> compression</span>
+            <span><i class="lg-crest">▲</i> crest</span>
+            <span><i class="lg-prob">●</i> detected problem</span>
+            <span><i class="lg-car">│</i> you</span>
+          </div>
+          <details class="corner-names">
+            <summary>Name the corners</summary>
+            <div class="corner-inputs" id="corner-inputs"></div>
+          </details>
+        </div>
+        <p class="hint" id="track-empty">The track map builds itself from your laps (needs position data from the game).</p>
+
+        <h3 class="sub">Tyre temperatures <span class="hint inline">seen from above, outside edges on the outside</span></h3>
+        <div class="tyres" id="tyres"></div>
+        <p class="hint" id="tyres-empty">Shows up once you're driving.</p>
+      </div>
+
+      <!-- Manual description -->
+      <div id="tab-describe">
+      <div class="step">
+        <div class="step-title"><span class="num">1</span> Problem</div>
+        <div class="behavior-grid" id="behaviors"></div>
+      </div>
+
+      <div class="step" id="step-phase" hidden>
+        <div class="step-title"><span class="num">2</span> Where in the corner?</div>
+        <div class="corner">
+          <svg viewBox="0 0 360 240" id="corner-svg" aria-label="Corner phases">
+            <path class="road" d="M70 235 L70 150 C70 90 110 60 180 58 C250 56 300 70 350 95" />
+            <path class="braking-zone" d="M70 232 L70 152" />
+            <g class="seg" data-phase="entry">
+              <path class="hit" d="M70 150 C70 112 84 88 110 74" />
+              <path class="line" d="M70 150 C70 112 84 88 110 74" />
+            </g>
+            <g class="seg" data-phase="mid">
+              <path class="hit" d="M110 74 C135 61 160 58 205 58" />
+              <path class="line" d="M110 74 C135 61 160 58 205 58" />
+            </g>
+            <g class="seg" data-phase="exit">
+              <path class="hit" d="M205 58 C255 58 300 70 350 95" />
+              <path class="line" d="M205 58 C255 58 300 70 350 95" />
+            </g>
+            <text x="86" y="200" class="lbl muted">braking</text>
+            <text x="34" y="104" class="lbl" data-for="entry">Entry</text>
+            <text x="135" y="40" class="lbl" data-for="mid">Mid-corner</text>
+            <text x="268" y="52" class="lbl" data-for="exit">Exit</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="step" id="step-speed" hidden>
+        <div class="step-title"><span class="num">3</span> Which corners?</div>
+        <div class="segmented wide" id="speed">
+          <button data-value="slow">Slow corners</button>
+          <button data-value="fast">Fast corners</button>
+          <button data-value="both" class="active">Everywhere / not sure</button>
+        </div>
+      </div>
+
+      <div class="step" id="step-severity">
+        <div class="step-title"><span class="num" id="severity-num">4</span> How bad?</div>
+        <div class="segmented wide" id="severity">
+          <button data-value="slight">Slight</button>
+          <button data-value="moderate" class="active">Noticeable</button>
+          <button data-value="severe">Really bad</button>
+        </div>
+      </div>
+
+      <button class="primary" id="add" disabled>Add problem</button>
+      </div>
+
+      <div class="problems">
+        <div class="problems-head">
+          <h3>Your problems</h3>
+          <button class="ghost" id="clear" hidden>Clear all</button>
+        </div>
+        <ul id="problem-list"></ul>
+        <p class="hint" id="problem-empty">Add one or more problems. Suggestions update instantly.</p>
+      </div>
+
+      <div class="history" id="history" hidden>
+        <div class="problems-head">
+          <h3>Earlier runs</h3>
+          <button class="ghost" id="new-session" title="Forget all runs and start over">New session</button>
+        </div>
+        <div id="fixed-wrap">
+          <div class="h-title">Fixed (suggestions avoid bringing these back)</div>
+          <ul class="h-list" id="fixed-list"></ul>
+        </div>
+        <div id="applied-wrap">
+          <div class="h-title">Changes made</div>
+          <ul class="h-list" id="applied-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: suggestions -->
+    <section class="panel results">
+      <div class="run-bar">
+        <span class="run-chip" id="run-label">Run 1</span>
+        <span class="hint inline">Tick the changes you make, then start the next run. Suggestions remember what you fixed.</span>
+        <button class="primary run-btn" id="next-run">Next run →</button>
+      </div>
+      <div class="run-confirm" id="run-confirm" hidden>
+        <p id="run-confirm-text"></p>
+        <div class="live-actions">
+          <button class="ghost strong" id="run-confirm-yes">Start next run anyway</button>
+          <button class="ghost" id="run-confirm-no">Cancel</button>
+        </div>
+      </div>
+      <div class="toast" id="toast" hidden></div>
+      <div class="results-head">
+        <h2>Try these changes</h2>
+        <span class="hint" id="result-count"></span>
+      </div>
+
+      <div class="empty" id="empty">
+        <img src="logo.svg" alt="" />
+        <p>Describe what the car does wrong on the left.<br />You'll get a ranked list of setup changes with the reason for each.</p>
+      </div>
+
+      <div class="balance-point" id="balance-point" hidden>
+        <b>Close to the balance point.</b> Every change here could bring back a problem you already fixed.
+        Consider leaving this one, trying a single click of the top change, or working on your driving
+        through this phase (e.g. releasing the brake more gradually) instead.
+      </div>
+      <div id="top" class="cards"></div>
+      <details id="more-wrap" hidden>
+        <summary>More options <span id="more-count"></span></summary>
+        <div id="more" class="cards"></div>
+      </details>
+
+      <p class="tip" id="tip" hidden>
+        Change one or two things at a time, then drive 3–4 laps. Tick a change once you've tried it.
+      </p>
+    </section>
+  </main>
+
+  <template id="card-tpl">
+    <article class="card">
+      <div class="card-main">
+        <div class="badge"><span class="arrow"></span><span class="clicks"></span></div>
+        <div class="card-text">
+          <div class="card-top">
+            <span class="group"></span>
+            <span class="conflict-tag" hidden>Conflicting</span>
+            <span class="conflict-tag undo-tag" hidden>Undoes a fix</span>
+            <span class="conflict-tag info-tag" hidden>Changed before</span>
+          </div>
+          <h4 class="label"></h4>
+          <div class="dir"></div>
+        </div>
+        <label class="tried"><input type="checkbox" /> <span>Tried</span></label>
+      </div>
+      <ul class="reasons"></ul>
+      <div class="conflicts" hidden></div>
+      <div class="history-notes" hidden></div>
+    </article>
+  </template>
+
+  <script src="main.js"></script>
+</body>
+</html>

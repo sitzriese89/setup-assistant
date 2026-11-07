@@ -1,0 +1,70 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+  color: #eef0f6;
+  user-select: none;
+  cursor: move;
+}
+
+.hud {
+  box-sizing: border-box;
+  margin: 6px;
+  height: calc(100% - 12px);
+  padding: 10px 14px 8px;
+  border-radius: 14px;
+  background: rgba(12, 14, 19, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row { display: flex; align-items: baseline; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #626a7d; align-self: center; }
+.dot.driving { background: #3ddc84; box-shadow: 0 0 8px rgba(61, 220, 132, 0.8); }
+.dot.demo { background: #b48cff; }
+.phase { font-size: 14px; font-weight: 650; text-transform: capitalize; }
+.spacer { flex: 1; }
+.num { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.unit { font-size: 10px; color: #9097a8; text-transform: uppercase; margin-right: 10px; }
+.gear { min-width: 18px; text-align: right; }
+
+.bar { display: flex; align-items: center; gap: 8px; }
+.end { font-size: 10px; font-weight: 700; color: #9097a8; letter-spacing: 0.05em; }
+.track {
+  flex: 1;
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4cc3ff 0%, rgba(76, 195, 255, 0.15) 40%, rgba(255, 255, 255, 0.10) 50%, rgba(255, 138, 61, 0.15) 60%, #ff8a3d 100%);
+}
+.mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; background: rgba(255, 255, 255, 0.4); }
+.needle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: #eef0f6;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45);
+  transition: left 0.12s ease-out, opacity 0.3s;
+}
+.needle.off { opacity: 0.25; }
+
+.event {
+  height: 18px;
+  font-size: 13px;
+  font-weight: 650;
+  color: #ffcc4d;
+  opacity: 0;
+  transition: opacity 0.25s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.event.show { opacity: 1; }

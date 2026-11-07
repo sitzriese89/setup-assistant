@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Setup Assistant overlay</title>
+  <link rel="stylesheet" href="overlay.css" />
+</head>
+<body data-tauri-drag-region>
+  <div class="hud" data-tauri-drag-region>
+    <div class="row" data-tauri-drag-region>
+      <span class="dot" id="dot"></span>
+      <span class="phase" id="phase" data-tauri-drag-region>–</span>
+      <span class="spacer" data-tauri-drag-region></span>
+      <span class="num" id="speed" data-tauri-drag-region>–</span><span class="unit">km/h</span>
+      <span class="num gear" id="gear" data-tauri-drag-region>–</span>
+    </div>
+    <div class="bar" data-tauri-drag-region>
+      <span class="end">US</span>
+      <div class="track" data-tauri-drag-region>
+        <div class="mid"></div>
+        <div class="needle" id="needle"></div>
+      </div>
+      <span class="end">OS</span>
+    </div>
+    <div class="event" id="event"></div>
+  </div>
+  <script src="overlay.js"></script>
+</body>
+</html>

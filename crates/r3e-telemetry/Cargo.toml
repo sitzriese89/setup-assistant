@@ -1,0 +1,11 @@
+[package]
+name = "r3e-telemetry"
+version.workspace = true
+edition.workspace = true
+description = "Reads RaceRoom's $R3E shared memory and turns it into setup-core samples"
+
+[dependencies]
+setup-core = { path = "../setup-core" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Memory"] }

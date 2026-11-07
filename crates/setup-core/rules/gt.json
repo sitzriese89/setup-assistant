@@ -1,0 +1,745 @@
+{
+  "params": {
+    "front_arb": {
+      "label": "Front anti-roll bar",
+      "group": "Suspension",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "rear_arb": {
+      "label": "Rear anti-roll bar",
+      "group": "Suspension",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "front_spring": {
+      "label": "Front springs",
+      "group": "Suspension",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "rear_spring": {
+      "label": "Rear springs",
+      "group": "Suspension",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "front_ride_height": {
+      "label": "Front ride height",
+      "group": "Aero & ride height",
+      "increase": "Higher",
+      "decrease": "Lower"
+    },
+    "rear_ride_height": {
+      "label": "Rear ride height",
+      "group": "Aero & ride height",
+      "increase": "Higher",
+      "decrease": "Lower"
+    },
+    "rear_wing": {
+      "label": "Rear wing",
+      "group": "Aero & ride height",
+      "increase": "More angle",
+      "decrease": "Less angle"
+    },
+    "front_camber": {
+      "label": "Front camber",
+      "group": "Alignment",
+      "increase": "More negative",
+      "decrease": "Less negative"
+    },
+    "front_pressure": {
+      "label": "Front tyre pressure",
+      "group": "Tyres",
+      "increase": "Higher",
+      "decrease": "Lower"
+    },
+    "rear_pressure": {
+      "label": "Rear tyre pressure",
+      "group": "Tyres",
+      "increase": "Higher",
+      "decrease": "Lower"
+    },
+    "front_bump": {
+      "label": "Front slow bump",
+      "group": "Dampers",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "front_rebound": {
+      "label": "Front slow rebound",
+      "group": "Dampers",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "rear_bump": {
+      "label": "Rear slow bump",
+      "group": "Dampers",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "rear_rebound": {
+      "label": "Rear slow rebound",
+      "group": "Dampers",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "front_fast_bump": {
+      "label": "Front fast bump",
+      "group": "Dampers",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "rear_fast_bump": {
+      "label": "Rear fast bump",
+      "group": "Dampers",
+      "increase": "Stiffer",
+      "decrease": "Softer"
+    },
+    "brake_bias": {
+      "label": "Brake bias",
+      "group": "Brakes",
+      "increase": "More to the front",
+      "decrease": "More to the rear"
+    },
+    "brake_pressure": {
+      "label": "Brake pressure",
+      "group": "Brakes",
+      "increase": "Higher",
+      "decrease": "Lower"
+    },
+    "abs": {
+      "label": "ABS",
+      "group": "Electronics",
+      "increase": "More intervention",
+      "decrease": "Less intervention"
+    },
+    "tc": {
+      "label": "Traction control",
+      "group": "Electronics",
+      "increase": "More intervention",
+      "decrease": "Less intervention"
+    },
+    "diff_power": {
+      "label": "Differential (power / acceleration lock)",
+      "group": "Differential",
+      "increase": "More locking",
+      "decrease": "Less locking"
+    },
+    "diff_coast": {
+      "label": "Differential (coast / deceleration lock)",
+      "group": "Differential",
+      "increase": "More locking",
+      "decrease": "Less locking"
+    }
+  },
+  "behaviors": [
+    {
+      "id": "understeer",
+      "label": "Understeer",
+      "description": "The front washes wide, the car won't turn as much as you steer.",
+      "phases": [
+        "entry",
+        "mid",
+        "exit"
+      ],
+      "speed_matters": true
+    },
+    {
+      "id": "oversteer",
+      "label": "Oversteer",
+      "description": "The rear steps out, you need to catch it with opposite lock.",
+      "phases": [
+        "entry",
+        "mid",
+        "exit"
+      ],
+      "speed_matters": true
+    },
+    {
+      "id": "wheelspin",
+      "label": "Wheelspin",
+      "description": "The driven wheels spin when you get on the throttle.",
+      "phases": [
+        "exit"
+      ],
+      "speed_matters": false
+    },
+    {
+      "id": "braking_understeer",
+      "label": "Understeer under braking",
+      "description": "The car won't turn while you're still braking: the front tyres are busy braking. Often helped by easing off the brake more gradually as you turn in.",
+      "phases": [],
+      "speed_matters": false
+    },
+    {
+      "id": "front_lockup",
+      "label": "Front lockups",
+      "description": "The front tyres lock and the car goes straight under braking.",
+      "phases": [],
+      "speed_matters": false
+    },
+    {
+      "id": "unstable_braking",
+      "label": "Unstable under braking",
+      "description": "The rear gets light, wobbles or locks when you brake hard.",
+      "phases": [],
+      "speed_matters": false
+    },
+    {
+      "id": "bottoming",
+      "label": "Bottoming out",
+      "description": "The car scrapes the ground, or grip suddenly drops over bumps or at high speed.",
+      "phases": [],
+      "speed_matters": false
+    },
+    {
+      "id": "bottoming_compression",
+      "label": "Bottoming in compressions",
+      "description": "The car only hits the ground where the road dips (compressions), not everywhere. If it doesn't cost time or stability, it can be fine to leave it.",
+      "phases": [],
+      "speed_matters": false
+    },
+    {
+      "id": "kerbs",
+      "label": "Bad over kerbs",
+      "description": "The car jumps, bounces or gets upset when you use the kerbs.",
+      "phases": [],
+      "speed_matters": false
+    }
+  ],
+  "rules": [
+    {
+      "id": "understeer-entry",
+      "behavior": "understeer",
+      "phases": [
+        "entry"
+      ],
+      "changes": [
+        {
+          "param": "brake_bias",
+          "dir": "decrease",
+          "why": "Moving braking to the rear leaves the front tyres more grip for turning while you trail-brake."
+        },
+        {
+          "param": "diff_coast",
+          "dir": "decrease",
+          "why": "Less locking off the throttle lets the rear wheels turn at different speeds, so the car rotates more on turn-in."
+        },
+        {
+          "param": "front_bump",
+          "dir": "decrease",
+          "why": "A softer front bump loads the front tyres more gently as you brake, so they bite better on turn-in."
+        },
+        {
+          "param": "rear_rebound",
+          "dir": "increase",
+          "why": "Stiffer rear rebound slows the rear from lifting when you brake, which helps the car turn in."
+        },
+        {
+          "param": "front_arb",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "A softer front bar lets the front tyres share the load better, which adds front grip."
+        }
+      ]
+    },
+    {
+      "id": "understeer-mid-slow",
+      "behavior": "understeer",
+      "phases": [
+        "mid"
+      ],
+      "speed": "slow",
+      "changes": [
+        {
+          "param": "front_arb",
+          "dir": "decrease",
+          "why": "The softer front bar adds mechanical front grip, which matters most in slow corners."
+        },
+        {
+          "param": "rear_arb",
+          "dir": "increase",
+          "why": "A stiffer rear bar moves balance toward the front, so the car rotates more."
+        },
+        {
+          "param": "front_camber",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "More negative camber gives the outer front tyre a bigger contact patch while cornering."
+        },
+        {
+          "param": "front_spring",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Softer front springs give more mechanical grip at the front."
+        },
+        {
+          "param": "front_pressure",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Slightly lower front pressure can add grip. Keep an eye on tyre temperatures."
+        }
+      ]
+    },
+    {
+      "id": "understeer-mid-fast",
+      "behavior": "understeer",
+      "phases": [
+        "mid"
+      ],
+      "speed": "fast",
+      "requires_aero": true,
+      "changes": [
+        {
+          "param": "rear_wing",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Less rear wing moves aero balance forward, so the front has more grip in fast corners. Also gives a bit more top speed."
+        },
+        {
+          "param": "front_ride_height",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "A lower front adds rake and front downforce."
+        },
+        {
+          "param": "rear_ride_height",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "A higher rear also adds rake and shifts aero balance forward."
+        },
+        {
+          "param": "front_arb",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "A softer front bar helps a bit in fast corners too."
+        }
+      ]
+    },
+    {
+      "id": "understeer-exit",
+      "behavior": "understeer",
+      "phases": [
+        "exit"
+      ],
+      "changes": [
+        {
+          "param": "diff_power",
+          "dir": "decrease",
+          "why": "Less locking on the throttle lets the inside wheel turn at its own speed, so the car pushes wide less on exit."
+        },
+        {
+          "param": "front_arb",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "More front grip helps hold the line as you add throttle."
+        },
+        {
+          "param": "rear_arb",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "A stiffer rear bar helps the car rotate on exit. Don't go too far or it starts to snap."
+        }
+      ]
+    },
+    {
+      "id": "understeer-exit-fast",
+      "behavior": "understeer",
+      "phases": [
+        "exit"
+      ],
+      "speed": "fast",
+      "requires_aero": true,
+      "changes": [
+        {
+          "param": "rear_wing",
+          "dir": "decrease",
+          "max_clicks": 1,
+          "why": "Less rear wing moves aero balance forward in fast exits."
+        }
+      ]
+    },
+    {
+      "id": "oversteer-entry",
+      "behavior": "oversteer",
+      "phases": [
+        "entry"
+      ],
+      "changes": [
+        {
+          "param": "brake_bias",
+          "dir": "increase",
+          "why": "More bias to the front takes braking load off the rear tyres, which keeps the rear stable on turn-in."
+        },
+        {
+          "param": "diff_coast",
+          "dir": "increase",
+          "why": "More locking off the throttle keeps the rear wheels together and calms the car on entry."
+        },
+        {
+          "param": "rear_rebound",
+          "dir": "decrease",
+          "why": "Softer rear rebound keeps the rear tyres loaded when weight moves forward."
+        },
+        {
+          "param": "front_bump",
+          "dir": "increase",
+          "why": "A stiffer front bump slows the weight moving forward, which makes the car less nervous on entry."
+        },
+        {
+          "param": "rear_arb",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "A softer rear bar adds rear grip."
+        }
+      ]
+    },
+    {
+      "id": "oversteer-mid-slow",
+      "behavior": "oversteer",
+      "phases": [
+        "mid"
+      ],
+      "speed": "slow",
+      "changes": [
+        {
+          "param": "rear_arb",
+          "dir": "decrease",
+          "why": "A softer rear bar adds mechanical rear grip in slow corners."
+        },
+        {
+          "param": "front_arb",
+          "dir": "increase",
+          "why": "A stiffer front bar moves balance rearward, so the car is calmer."
+        },
+        {
+          "param": "rear_spring",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Softer rear springs give more mechanical rear grip."
+        },
+        {
+          "param": "rear_pressure",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Slightly lower rear pressure can add rear grip. Keep an eye on tyre temperatures."
+        }
+      ]
+    },
+    {
+      "id": "oversteer-mid-fast",
+      "behavior": "oversteer",
+      "phases": [
+        "mid"
+      ],
+      "speed": "fast",
+      "requires_aero": true,
+      "changes": [
+        {
+          "param": "rear_wing",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "More rear wing adds rear downforce, which keeps the rear planted in fast corners."
+        },
+        {
+          "param": "rear_ride_height",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "A lower rear means less rake, which moves aero balance rearward."
+        },
+        {
+          "param": "front_ride_height",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "A higher front also reduces rake and front downforce."
+        },
+        {
+          "param": "rear_arb",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "A softer rear bar helps a bit in fast corners too."
+        }
+      ]
+    },
+    {
+      "id": "oversteer-exit",
+      "behavior": "oversteer",
+      "phases": [
+        "exit"
+      ],
+      "changes": [
+        {
+          "param": "tc",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "More traction control catches the rear before it breaks loose on throttle."
+        },
+        {
+          "param": "diff_power",
+          "dir": "decrease",
+          "why": "Less locking on the throttle makes it gentler when the rear starts to slide, so it's less likely to snap."
+        },
+        {
+          "param": "rear_arb",
+          "dir": "decrease",
+          "why": "A softer rear bar helps the rear put the power down."
+        },
+        {
+          "param": "rear_spring",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Softer rear springs let weight settle onto the rear tyres as you accelerate."
+        }
+      ]
+    },
+    {
+      "id": "oversteer-exit-fast",
+      "behavior": "oversteer",
+      "phases": [
+        "exit"
+      ],
+      "speed": "fast",
+      "requires_aero": true,
+      "changes": [
+        {
+          "param": "rear_wing",
+          "dir": "increase",
+          "max_clicks": 1,
+          "why": "More rear downforce keeps the rear stable in fast exits."
+        }
+      ]
+    },
+    {
+      "id": "wheelspin-rear-driven",
+      "behavior": "wheelspin",
+      "phases": [
+        "exit"
+      ],
+      "drivetrains": [
+        "rwd",
+        "awd"
+      ],
+      "changes": [
+        {
+          "param": "tc",
+          "dir": "increase",
+          "why": "More traction control limits wheelspin directly."
+        },
+        {
+          "param": "rear_arb",
+          "dir": "decrease",
+          "why": "A softer rear bar keeps the inside rear tyre on the ground, so it spins less."
+        },
+        {
+          "param": "rear_spring",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Softer rear springs let the rear squat and find traction."
+        },
+        {
+          "param": "diff_power",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "If mostly the inside wheel spins, more locking sends power to the wheel with grip."
+        }
+      ]
+    },
+    {
+      "id": "wheelspin-fwd",
+      "behavior": "wheelspin",
+      "phases": [
+        "exit"
+      ],
+      "drivetrains": [
+        "fwd"
+      ],
+      "changes": [
+        {
+          "param": "tc",
+          "dir": "increase",
+          "why": "More traction control limits wheelspin directly."
+        },
+        {
+          "param": "front_arb",
+          "dir": "decrease",
+          "why": "A softer front bar keeps the inside front tyre loaded, so it spins less."
+        },
+        {
+          "param": "diff_power",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "If the inside front spins up, more locking sends power to the wheel with grip."
+        }
+      ]
+    },
+    {
+      "id": "braking-understeer",
+      "behavior": "braking_understeer",
+      "changes": [
+        {
+          "param": "brake_bias",
+          "dir": "decrease",
+          "why": "Less braking on the front leaves the front tyres more grip for turning while you trail-brake."
+        },
+        {
+          "param": "abs",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "More ABS intervention keeps the front tyres from sliding under braking, so they can still steer."
+        },
+        {
+          "param": "diff_coast",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Less locking off the throttle helps the car rotate while you are still on the brakes."
+        },
+        {
+          "param": "brake_pressure",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Lower brake pressure makes it easier to brake hard without overloading the fronts."
+        }
+      ]
+    },
+    {
+      "id": "front-lockup",
+      "behavior": "front_lockup",
+      "changes": [
+        {
+          "param": "brake_bias",
+          "dir": "decrease",
+          "why": "Moving bias rearward means the fronts lock later."
+        },
+        {
+          "param": "abs",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "More ABS intervention stops the wheels from locking. You may lose a little braking performance."
+        },
+        {
+          "param": "brake_pressure",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Lower brake pressure gives you more pedal travel before lockup, which makes braking easier to control."
+        }
+      ]
+    },
+    {
+      "id": "unstable-braking",
+      "behavior": "unstable_braking",
+      "changes": [
+        {
+          "param": "brake_bias",
+          "dir": "increase",
+          "why": "More bias to the front stops the rear tyres from locking or sliding under braking."
+        },
+        {
+          "param": "diff_coast",
+          "dir": "increase",
+          "why": "More coast locking keeps the rear wheels together and calms the rear under braking."
+        },
+        {
+          "param": "abs",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "More ABS intervention catches rear lockups."
+        },
+        {
+          "param": "rear_rebound",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Softer rear rebound keeps the rear tyres in contact as weight moves forward."
+        }
+      ]
+    },
+    {
+      "id": "bottoming",
+      "behavior": "bottoming",
+      "changes": [
+        {
+          "param": "front_ride_height",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "Raise the end that scrapes. In GT cars, usually the front at high speed or under braking."
+        },
+        {
+          "param": "rear_ride_height",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "Raise the rear if it bottoms over bumps or under hard acceleration. Keep the rake similar to keep the balance."
+        },
+        {
+          "param": "front_spring",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "Stiffer springs stop the car from compressing so far under downforce."
+        },
+        {
+          "param": "front_bump",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "A stiffer bump slows down how fast the car compresses."
+        }
+      ]
+    },
+    {
+      "id": "bottoming-compression",
+      "behavior": "bottoming_compression",
+      "changes": [
+        {
+          "param": "front_fast_bump",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "A firmer fast bump resists the sudden hit of a compression without making the car stiffer everywhere."
+        },
+        {
+          "param": "rear_fast_bump",
+          "dir": "increase",
+          "max_clicks": 2,
+          "why": "The same for the rear, if the rear is the end that scrapes."
+        },
+        {
+          "param": "front_ride_height",
+          "dir": "increase",
+          "max_clicks": 1,
+          "why": "One click higher is usually enough when it only scrapes in a dip. More costs downforce everywhere."
+        },
+        {
+          "param": "front_spring",
+          "dir": "increase",
+          "max_clicks": 1,
+          "why": "Slightly stiffer springs stop the car compressing as far under the extra load."
+        }
+      ]
+    },
+    {
+      "id": "kerbs",
+      "behavior": "kerbs",
+      "changes": [
+        {
+          "param": "front_fast_bump",
+          "dir": "decrease",
+          "why": "A softer fast bump lets the wheel absorb sharp hits like kerbs instead of throwing the car up."
+        },
+        {
+          "param": "rear_fast_bump",
+          "dir": "decrease",
+          "why": "The same for the rear, so the car stays settled on kerbs."
+        },
+        {
+          "param": "front_arb",
+          "dir": "decrease",
+          "max_clicks": 2,
+          "why": "Softer bars let one wheel ride the kerb without lifting the other side."
+        },
+        {
+          "param": "front_ride_height",
+          "dir": "increase",
+          "max_clicks": 1,
+          "why": "A little more ride height keeps the floor off taller kerbs."
+        }
+      ]
+    }
+  ]
+}

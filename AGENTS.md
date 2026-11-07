@@ -1,0 +1,34 @@
+# Notes for AI coding agents
+
+Setup Assistant: a Rust + Tauri 2 desktop app that suggests sim racing setup changes from
+described problems and live telemetry (RaceRoom first). Read [ADR.md](ADR.md) before changing
+direction; [CONTRIBUTING.md](CONTRIBUTING.md) has the full developer guide.
+
+## Ground rules
+
+- `crates/setup-core` stays game- and UI-agnostic. Game specifics go in adapter crates
+  implementing `setup_core::live::Source`.
+- Setup advice is data: edit `crates/setup-core/rules/gt.json`, not code.
+- Don't read, decrypt or write RaceRoom setup files (ADR-1).
+- Detection thresholds are guesses being tuned on real data. Don't change them without a
+  recording or a stated reason.
+- Significant design decisions get a new ADR in `ADR.md` (append; supersede, don't rewrite).
+
+## Before you finish
+
+```bash
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
+New detectors need a demo case in `crates/setup-core/src/demo.rs` and a test that asserts
+exact detections. New Tauri commands need a branch in `crates/setup-core/examples/ui_preview.rs`.
+
+## Checking UI changes
+
+- Browser: `cargo run -p setup-core --example ui_preview`, open http://127.0.0.1:1420, then
+  Live telemetry → Try demo lap.
+- Real app window: start it with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`
+  and drive the page over the Chrome DevTools Protocol.
+- On Windows, if linking fails with `LNK1104`, set `CARGO_TARGET_DIR` to a short path.

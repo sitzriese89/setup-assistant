@@ -1,0 +1,15 @@
+[package]
+name = "setup-assistant"
+version.workspace = true
+edition.workspace = true
+description = "Sim racing setup assistant"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+setup-core = { path = "../../crates/setup-core" }
+r3e-telemetry = { path = "../../crates/r3e-telemetry" }

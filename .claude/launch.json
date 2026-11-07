@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ui-preview",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": ["run", "-p", "setup-core", "--example", "ui_preview"],
+      "port": 1420
+    }
+  ]
+}

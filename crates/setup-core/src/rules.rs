@@ -260,7 +260,9 @@ impl RuleBook {
             let inc = votes.get(&(param.clone(), Direction::Increase));
             let dec = votes.get(&(param.clone(), Direction::Decrease));
             let (dir, win, lose) = match (inc, dec) {
-                (Some(i), Some(d)) if i.0 >= d.0 => (Direction::Increase, i, Some(d)),
+                // Equally strong reasons both ways: there's no direction to recommend.
+                (Some(i), Some(d)) if (i.0 - d.0).abs() <= 1e-4 * i.0.abs().max(d.0.abs()).max(1.0) => continue,
+                (Some(i), Some(d)) if i.0 > d.0 => (Direction::Increase, i, Some(d)),
                 (Some(i), Some(d)) => (Direction::Decrease, d, Some(i)),
                 (Some(i), None) => (Direction::Increase, i, None),
                 (None, Some(d)) => (Direction::Decrease, d, None),

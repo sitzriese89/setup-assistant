@@ -19,7 +19,15 @@ fn main() {
         thresholds.understeer_deg_per_g = u;
     }
 
-    let samples = recording::read(&path).expect("can't read recording");
+    let imported = recording::read_checked(&path).expect("can't read recording");
+    if imported.rejected > 0 {
+        eprintln!(
+            "left out {} bad rows; first: {}",
+            imported.rejected,
+            imported.first_problem.as_deref().unwrap_or("?")
+        );
+    }
+    let samples = imported.samples;
     let mut a = Analyzer::new(thresholds.clone());
 
     for s in &samples {

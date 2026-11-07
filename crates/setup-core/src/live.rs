@@ -107,6 +107,7 @@ impl Inner {
     /// Switches to the map of `info` (loading it from disk), saving the previous one.
     fn set_track(&mut self, info: Option<TrackInfo>) {
         let Some(info) = info else { return };
+        self.analyzer.set_track_length(Some(info.length_m));
         if self.track.as_ref().is_some_and(|m| m.info.id == info.id) {
             return;
         }

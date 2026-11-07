@@ -252,7 +252,23 @@ function toast(text, warn = false) {
 }
 
 async function nextRun() {
+  // One at a time: a double click must advance one run, not two.
+  if (nextRun.busy) return;
+  nextRun.busy = true;
+  $("#next-run").disabled = true;
   $("#run-confirm").hidden = true;
+  live.runSeq += 1;
+  try {
+    // Tell the backend first: if that fails, the session stays as it was.
+    await invoke("live_next_run", { run: state.run + 1 });
+  } catch (e) {
+    toast(`Couldn't start the next run: ${e}. Nothing was changed, try again.`, true);
+    return;
+  } finally {
+    live.runSeq += 1;
+    nextRun.busy = false;
+    $("#next-run").disabled = false;
+  }
   const changes = state.tried.size;
   for (const a of state.tried.values()) state.history.applied.push({ ...a, run: state.run });
   // Problems of the finished run: the ones in the list plus anything telemetry detected.
@@ -271,9 +287,7 @@ async function nextRun() {
   state.symptoms = [];
   state.run += 1;
   live.detected = [];
-  live.runSeq += 1;
-  await invoke("live_next_run", { run: state.run });
-  live.runSeq += 1;
+  save();
   renderProblems();
   refresh();
   pollLive();
@@ -307,9 +321,11 @@ async function newSession() {
 // ---------- results ----------
 
 async function refresh() {
+  // Answers can come back out of order: only the latest request may render.
+  const seq = (refresh.seq = (refresh.seq || 0) + 1);
   const symptoms = state.symptoms.map((s) => s.symptom);
   const suggestions = symptoms.length ? await invoke("suggest", { car: state.car, symptoms, history: historyForCore() }) : [];
-  renderSuggestions(suggestions);
+  if (seq === refresh.seq) renderSuggestions(suggestions);
 }
 
 function renderSuggestions(list) {
@@ -772,14 +788,14 @@ function whereText(d) {
   let text;
   if (d.one_place) {
     text = top.feature
-      ? `Only ${at} (${top.count} of ${d.count}): that's the track there`
+      ? `Only ${at} (${top.count} of ${d.count}), where the road ${top.feature === "crest" ? "crests" : "dips"}: could be the track rather than the setup`
       : `Only ${at} (${top.count} of ${d.count}): maybe that spot (crest, bump, kerb) rather than the setup`;
   } else if (d.places.length === 1) {
     text = at;
   } else {
     text = `${d.places.length} places · most ${at} (${top.count}×)`;
   }
-  if (d.persistent) text += ` · same spot in each of your last ${d.runs_checked} runs, whatever you changed: likely the track`;
+  if (d.persistent) text += ` · came back at this spot in each of your last ${d.runs_checked} runs`;
   return text;
 }
 

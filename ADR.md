@@ -283,3 +283,31 @@ port can be enabled with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debuggi
 
 **Consequences.** Fast UI work and browser-based checks (also for AI agents). Every new Tauri
 command needs a matching branch in `ui_preview.rs`.
+
+## ADR-18: Treat bad or missing data as unknown, never as a reading
+
+**Context.** A review of the code (2026-11-07) found places where missing or broken data
+quietly turned into measurements or stopped analysis: a malformed CSV value shifted the
+following columns; a missing ride height defaulted to 0 m, which counts as bottoming;
+RaceRoom's simulation clock restarts at 0 with a new session, and the analyzer then dropped
+every frame until the clock passed its old value; equally strong opposite votes for a
+parameter produced an arbitrary "increase"; the same spot just before and after the start line
+counted as two places; and the app called a recurring spot "likely the track, whatever you
+changed" although it never compares clean runs or changes.
+
+**Decision.**
+- `Sample::default()` marks ride height and lap distance as unknown (< 0), not 0.
+- A clock that goes backwards starts a new epoch: in-progress events are dropped, everything
+  learned about the car is kept. Equal timestamps are still skipped as duplicates.
+- Recordings are read column by column (`recording::read_checked`). A row with a missing,
+  malformed or non-finite value is rejected and counted, never shifted. Supported layouts:
+  34, 36 and 37 columns; extra columns are ignored; elevation may be empty.
+- A parameter with equally strong opposite votes is left out of the suggestions: there is no
+  direction to recommend.
+- With the lap length known, places wrap at the start line, in the analyzer and in run
+  comparison.
+- The UI says a problem "came back at this spot" instead of claiming it's the track. This
+  softens the wording of ADR-12 and ADR-13; the detection logic is unchanged.
+
+**Consequences.** No detection thresholds changed. Old recordings still load. A recurring spot
+stays a hint until clean runs, car identity and changes are compared.

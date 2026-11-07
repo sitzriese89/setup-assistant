@@ -49,15 +49,74 @@ impl Recorder {
     }
 }
 
-/// Reads a recording back. Rows that don't parse are skipped. Older files
-/// without vertical acceleration and lap distance read those as unknown.
+/// A recording read back, with what had to be left out.
+#[derive(Debug, Default)]
+pub struct Imported {
+    pub samples: Vec<Sample>,
+    /// Rows that were left out because a value was missing or not a number.
+    pub rejected: usize,
+    /// The first problem found, e.g. "line 12, column 3 (throttle): 'x' is not a number".
+    pub first_problem: Option<String>,
+}
+
+/// Reads a recording back, leaving out rows that don't parse. See [`read_checked`].
 pub fn read(path: &Path) -> io::Result<Vec<Sample>> {
-    let mut out = Vec::new();
-    for line in BufReader::new(File::open(path)?).lines().skip(1) {
+    read_checked(path).map(|r| r.samples)
+}
+
+/// Reads a recording back. Every value is read from its own column, so a bad value
+/// rejects its row instead of shifting the others. Supported layouts: 34 columns (oldest,
+/// no vertical acceleration and lap distance), 36 (no elevation) and 37 (current); extra
+/// columns are ignored. Elevation may be empty.
+pub fn read_checked(path: &Path) -> io::Result<Imported> {
+    let mut out = Imported::default();
+    let names: Vec<&str> = HEADER.split(',').collect();
+    let mut lines = BufReader::new(File::open(path)?).lines();
+    let header = lines.next().transpose()?.unwrap_or_default();
+    if !header.starts_with("time,speed,") {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "not a Setup Assistant recording"));
+    }
+    for (n, line) in lines.enumerate() {
         let line = line?;
-        let cols: Vec<&str> = line.split(',').collect();
-        let v: Vec<f64> = cols.iter().take(36).filter_map(|x| x.trim().parse().ok()).collect();
-        if v.len() < 34 {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let cols: Vec<&str> = line.split(',').map(str::trim).collect();
+        let required = match cols.len() {
+            34 => 34,
+            36 => 36,
+            l if l >= 37 => 36,
+            _ => {
+                out.rejected += 1;
+                out.first_problem
+                    .get_or_insert_with(|| format!("line {}: {} columns, expected 34, 36 or 37", n + 2, cols.len()));
+                continue;
+            }
+        };
+        let mut v = Vec::with_capacity(required);
+        let mut bad = None;
+        for (i, x) in cols.iter().take(required).enumerate() {
+            match x.parse::<f64>() {
+                Ok(x) if x.is_finite() => v.push(x),
+                _ => {
+                    bad = Some(format!("line {}, column {} ({}): '{x}' is not a number", n + 2, i + 1, names[i]));
+                    break;
+                }
+            }
+        }
+        let elevation = match cols.get(36).copied() {
+            None | Some("") => None,
+            Some(x) => match x.parse::<f32>() {
+                Ok(e) if e.is_finite() => Some(e),
+                _ => {
+                    bad.get_or_insert_with(|| format!("line {}, column 37 (elevation): '{x}' is not a number", n + 2));
+                    None
+                }
+            },
+        };
+        if let Some(problem) = bad {
+            out.rejected += 1;
+            out.first_problem.get_or_insert(problem);
             continue;
         }
         let f = |i: usize| v[i] as f32;
@@ -78,16 +137,14 @@ pub fn read(path: &Path) -> io::Result<Vec<Sample>> {
         if v.len() >= 36 {
             s.vert_accel = f(34);
             s.lap_distance = f(35);
-            s.elevation = cols.get(36).and_then(|x| x.trim().parse::<f32>().ok()).filter(|e| e.is_finite());
-        } else {
-            s.lap_distance = -1.0;
+            s.elevation = elevation;
         }
         for t in 0..4 {
             s.tyre_temp[t] = [f(12 + t * 3), f(13 + t * 3), f(14 + t * 3)];
             s.tyre_pressure[t] = f(24 + t);
             s.ride_height[t] = f(28 + t);
         }
-        out.push(s);
+        out.samples.push(s);
     }
     Ok(out)
 }

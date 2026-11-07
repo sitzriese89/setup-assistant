@@ -237,6 +237,78 @@ mod telemetry_tests {
         let out = book.suggest(&car, &symptoms);
         assert!(out.iter().any(|s| s.param == "tc"), "traction control should come up for exit oversteer/wheelspin");
     }
+
+    #[test]
+    fn game_clock_reset_resumes_analysis() {
+        // Three laps, then the game restarts the session and its clock starts at 0 again.
+        let mut a = Analyzer::default();
+        for session in 0..2 {
+            let mut t0 = 0.0;
+            for _ in 0..3 {
+                let lap = demo::lap(t0);
+                t0 = lap.last().unwrap().time + 0.01;
+                lap.iter().for_each(|s| a.push(s));
+            }
+            let lockups = a.report().detected.iter().find(|d| d.symptom.behavior == "front_lockup").map(|d| d.count);
+            assert_eq!(lockups, Some(3 * (session + 1)), "session {session}");
+        }
+    }
+
+    #[test]
+    fn missing_ride_height_is_not_bottoming() {
+        assert!(Sample::default().ride_height.iter().all(|h| *h < 0.0));
+        assert!(Sample::default().lap_distance < 0.0);
+        let r = run(3, |s| s.ride_height = Sample::default().ride_height);
+        assert!(!found(&r, "bottoming", None, CornerSpeed::Both));
+        assert_eq!(r.detected.len(), 5);
+    }
+
+    #[test]
+    fn bad_recording_rows_are_rejected_not_shifted() {
+        let dir = std::env::temp_dir().join(format!("setup-core-csv-{}", std::process::id()));
+        let path = dir.join("bad.csv");
+        let mut rec = recording::Recorder::create(&path).unwrap();
+        rec.write(&demo::lap(0.0)[500]).unwrap();
+        rec.flush().unwrap();
+        drop(rec);
+        let text = std::fs::read_to_string(&path).unwrap();
+        let (header, good) = text.trim_end().split_once('\n').unwrap();
+        let cols: Vec<&str> = good.split(',').collect();
+        let with = |i: usize, v: &str| {
+            let mut c = cols.clone();
+            c[i] = v;
+            c.join(",")
+        };
+        let rows = [
+            good.to_string(),
+            with(2, "x"),            // malformed throttle
+            with(1, "NaN"),          // non-finite speed
+            cols[..20].join(","),    // truncated
+            cols[..34].join(","),    // oldest layout: still fine
+            with(36, ""),            // no elevation: fine
+            format!("{good},extra"), // extra column: ignored
+        ];
+        std::fs::write(&path, format!("{header}\n{}\n", rows.join("\n"))).unwrap();
+        let r = recording::read_checked(&path).unwrap();
+        assert_eq!(r.samples.len(), 4);
+        assert_eq!(r.rejected, 3);
+        assert!(r.first_problem.as_deref().unwrap().contains("throttle"), "{:?}", r.first_problem);
+        assert!(r.samples[1].lap_distance < 0.0, "oldest layout has no lap distance");
+        assert!(r.samples[2].elevation.is_none());
+        assert!((r.samples[3].speed - r.samples[0].speed).abs() < 1e-6);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn places_across_the_start_line_are_one_place() {
+        let events = [5.0, 10.0, 1995.0, 1990.0, 800.0];
+        let places = telemetry::cluster(&events, 80.0, Some(2000.0));
+        assert_eq!(places.len(), 2);
+        assert_eq!(places[0].count, 4);
+        let d = places[0].distance_m;
+        assert!(!(1.0..1999.0).contains(&d), "should sit on the line, got {d}");
+        assert_eq!(telemetry::cluster(&events, 80.0, None).len(), 3, "without the lap length");
+    }
 }
 
 #[cfg(test)]
@@ -340,6 +412,16 @@ mod tests {
     #[test]
     fn opposite_requests_are_flagged() {
         let book = RuleBook::builtin();
+        let mut worse = symptom("unstable_braking", None, CornerSpeed::Both);
+        worse.severity = Severity::Severe;
+        let out = book.suggest(&gt3(), &[symptom("understeer", Some(Phase::Entry), CornerSpeed::Both), worse]);
+        let bias = out.iter().find(|x| x.param == "brake_bias").unwrap();
+        assert!(!bias.conflicts.is_empty());
+    }
+
+    #[test]
+    fn equally_strong_opposite_requests_give_no_direction() {
+        let book = RuleBook::builtin();
         let out = book.suggest(
             &gt3(),
             &[
@@ -347,7 +429,6 @@ mod tests {
                 symptom("unstable_braking", None, CornerSpeed::Both),
             ],
         );
-        let bias = out.iter().find(|x| x.param == "brake_bias").unwrap();
-        assert!(!bias.conflicts.is_empty());
+        assert!(out.iter().all(|x| x.param != "brake_bias"), "a tie shouldn't pick a direction");
     }
 }

@@ -44,7 +44,8 @@ rejected, so typos fail the `builtin_rules_are_valid` test.
   light for 0.3 s and its balance isn't judged.
 - **Places:** every event stores its lap distance. Detections list where they happened, and
   a problem with at least 3 events, 70% of them within 80 m, is flagged as "one place only":
-  likely the track there (crest, bump, kerb) rather than the setup.
+  maybe the track there (crest, bump, kerb) rather than the setup. Distances wrap at the start
+  line, so events just before and just after it count as one place.
 - **Oversteer:** countersteering while the body slides (slip > 2.5°), or slip > 6° on its own.
 - **Lockups / wheelspin:** wheel surface speed vs. car speed under braking / throttle.
 - **Bottoming:** ride height under 8 mm at speed (not verified against real scraping yet).
@@ -66,8 +67,9 @@ and cornering force. From that it finds:
 
 Once a lap is mapped, detections say where they happen ("most at T7 The Dipper · compression").
 The map also remembers where problems happened in your last runs on that track. A problem at
-the same spot in each recent run, whatever you changed, is flagged as likely the track rather
-than the setup. This needs RaceRoom's car position, which older recordings don't contain.
+the same spot in each recent run is flagged as recurring there. That's a hint, not proof that
+it's the track: clean runs and what you changed aren't compared yet. This needs RaceRoom's car
+position, which older recordings don't contain.
 
 ## Runs and history
 

@@ -112,6 +112,16 @@ pub struct TrackView {
 }
 
 impl TrackMap {
+    /// Distance between two lap positions, the short way round (across the start line if shorter).
+    fn gap(&self, a: f32, b: f32) -> f32 {
+        let d = (a - b).abs();
+        if self.info.length_m > 0.0 {
+            d.min((self.info.length_m - d).abs())
+        } else {
+            d
+        }
+    }
+
     pub fn new(info: TrackInfo) -> Self {
         let n = (info.length_m.max(BIN_M) / BIN_M).ceil() as usize + 1;
         Self {
@@ -351,7 +361,7 @@ impl TrackMap {
                 p.seen_in_runs = recent
                     .iter()
                     .filter(|r| {
-                        r.events.iter().any(|(b, at)| *b == d.symptom.behavior && (at - p.distance_m).abs() < 80.0)
+                        r.events.iter().any(|(b, at)| *b == d.symptom.behavior && self.gap(*at, p.distance_m) < 80.0)
                     })
                     .count() as u32;
             }

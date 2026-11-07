@@ -27,7 +27,7 @@ const G: f32 = 9.81;
 const DEFAULT_HALF_RANGE_DEG: f32 = 270.0;
 
 /// One physics frame, in SI units.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sample {
     /// Seconds, increasing.
     pub time: f64,
@@ -43,7 +43,7 @@ pub struct Sample {
     pub yaw_rate: f32,
     /// m/s², sideways.
     pub lat_accel: f32,
-    /// m/s², sideways velocity of the car body (for body slip angle).
+    /// m/s, sideways velocity of the car body (for body slip angle).
     pub lat_velocity: f32,
     /// Wheel surface speed in m/s.
     pub wheel_speed: [f32; 4],
@@ -62,11 +62,41 @@ pub struct Sample {
     #[serde(default)]
     pub vert_accel: f32,
     /// Metres from the start line (< 0 = unknown). Used to tell where problems happen.
-    #[serde(default)]
+    #[serde(default = "unknown")]
     pub lap_distance: f32,
     /// Height of the car above some fixed level, metres. Builds the track's elevation map.
     #[serde(default)]
     pub elevation: Option<f32>,
+}
+
+fn unknown() -> f32 {
+    -1.0
+}
+
+/// Everything zero, except channels where zero is a real reading: ride height and lap
+/// distance default to unknown, so a source that doesn't fill them can't fake bottoming.
+impl Default for Sample {
+    fn default() -> Self {
+        Self {
+            time: 0.0,
+            speed: 0.0,
+            throttle: 0.0,
+            brake: 0.0,
+            steer: 0.0,
+            yaw_rate: 0.0,
+            lat_accel: 0.0,
+            lat_velocity: 0.0,
+            wheel_speed: [0.0; 4],
+            tyre_temp: [[0.0; 3]; 4],
+            tyre_pressure: [0.0; 4],
+            ride_height: [unknown(); 4],
+            gear: 0,
+            steer_range_deg: 0.0,
+            vert_accel: 0.0,
+            lap_distance: unknown(),
+            elevation: None,
+        }
+    }
 }
 
 /// What the car is doing right now, for the live display.
@@ -276,6 +306,8 @@ pub struct Analyzer {
     events: HashMap<EventKey, u32>,
     /// Lap distance of each event.
     event_places: HashMap<EventKey, Vec<f32>>,
+    /// Lap length in metres, if known: places just before and after the start line are one place.
+    track_length: Option<f32>,
     last_event: Option<LastEvent>,
     /// Vertical acceleration on flat straights, to learn the "level road" reading.
     verts: Vec<f32>,
@@ -320,6 +352,7 @@ impl Analyzer {
             detectors: Detectors::default(),
             events: HashMap::new(),
             event_places: HashMap::new(),
+            track_length: None,
             last_event: None,
             verts: Vec::new(),
             vert_cursor: 0,
@@ -341,7 +374,14 @@ impl Analyzer {
     }
 
     pub fn reset(&mut self) {
+        let track_length = self.track_length;
         *self = Self::new(self.thresholds.clone());
+        self.track_length = track_length;
+    }
+
+    /// Lap length in metres (None or <= 0 = unknown). Survives [`reset`](Self::reset).
+    pub fn set_track_length(&mut self, metres: Option<f32>) {
+        self.track_length = metres.filter(|m| *m > 0.0);
     }
 
     /// Lap distance of the latest sample, if known.
@@ -403,7 +443,15 @@ impl Analyzer {
     pub fn push(&mut self, s: &Sample) {
         let dt = match self.last_time {
             Some(t) if s.time > t => (s.time - t) as f32,
-            Some(_) => return, // duplicate or rewound frame
+            Some(t) if s.time == t => return, // duplicate frame (paused, or polled twice)
+            Some(_) => {
+                // Clock went backwards: the game restarted the session. Carry on from the
+                // new time; keep what was learned about the car, drop half-finished events.
+                self.last_time = Some(s.time);
+                self.detectors = Detectors::default();
+                self.balance = None;
+                return;
+            }
             None => {
                 self.last_time = Some(s.time);
                 return;
@@ -617,8 +665,11 @@ impl Analyzer {
                     Severity::Severe
                 };
                 let key = (behavior.clone(), *phase, *speed);
-                let places =
-                    self.event_places.get(&key).map(|d| cluster(d, self.thresholds.place_radius_m)).unwrap_or_default();
+                let places = self
+                    .event_places
+                    .get(&key)
+                    .map(|d| cluster(d, self.thresholds.place_radius_m, self.track_length))
+                    .unwrap_or_default();
                 let located: u32 = places.iter().map(|p| p.count).sum();
                 let one_place = located >= 3
                     && places
@@ -716,23 +767,41 @@ impl Analyzer {
 }
 
 /// Groups lap distances into places (events within `radius` metres of a place's first event).
-fn cluster(distances: &[f32], radius: f32) -> Vec<Place> {
+/// With the lap length known, a place just before the start line and one just after it are
+/// the same place.
+pub(crate) fn cluster(distances: &[f32], radius: f32, lap_length: Option<f32>) -> Vec<Place> {
     let mut d: Vec<f32> = distances.iter().copied().filter(|x| *x >= 0.0).collect();
     d.sort_by(f32::total_cmp);
-    let mut groups: Vec<(f32, f32, u32)> = Vec::new(); // (first, sum, count)
+    let mut groups: Vec<(f32, f32, f32, u32)> = Vec::new(); // (first, last, sum, count)
     for x in d {
         match groups.last_mut() {
             Some(g) if x - g.0 <= radius => {
-                g.1 += x;
-                g.2 += 1;
+                g.1 = x;
+                g.2 += x;
+                g.3 += 1;
             }
-            _ => groups.push((x, x, 1)),
+            _ => groups.push((x, x, x, 1)),
+        }
+    }
+    if let Some(len) = lap_length {
+        if groups.len() >= 2 {
+            let (head, tail) = (groups[0], groups[groups.len() - 1]);
+            if head.0 + len - tail.1 <= radius {
+                // Count the places after the line as one lap further on, then wrap the mean.
+                let sum = tail.2 + head.2 + len * head.3 as f32;
+                let last = groups.len() - 1;
+                groups[last] = (tail.0, head.1 + len, sum, tail.3 + head.3);
+                groups.remove(0);
+            }
         }
     }
     let mut places: Vec<Place> = groups
         .into_iter()
-        .map(|(_, sum, n)| Place {
-            distance_m: sum / n as f32,
+        .map(|(_, _, sum, n)| Place {
+            distance_m: match lap_length {
+                Some(len) => (sum / n as f32).rem_euclid(len),
+                None => sum / n as f32,
+            },
             count: n,
             label: String::new(),
             feature: None,

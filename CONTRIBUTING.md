@@ -113,6 +113,8 @@ command needs a matching branch in `examples/ui_preview.rs`.
 - A design change (new direction, replacing an approach)? Add or update a record in
   [ADR.md](ADR.md) in the same PR.
 - User-facing behaviour changed? Update README or `docs/how-it-works.md`.
+- By contributing you agree that your contribution is licensed under the project's
+  [MIT license](LICENSE).
 
 ## Working with AI coding agents
 

@@ -5,6 +5,8 @@ members = ["crates/setup-core", "crates/r3e-telemetry", "app/src-tauri"]
 [workspace.package]
 edition = "2021"
 version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/sitzriese89/setup-assistant"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -2,6 +2,8 @@
 name = "setup-core"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Sim-agnostic setup model, symptom model and rules engine"
 
 [dependencies]

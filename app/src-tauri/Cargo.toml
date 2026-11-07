@@ -2,6 +2,8 @@
 name = "setup-assistant"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Sim racing setup assistant"
 
 [build-dependencies]

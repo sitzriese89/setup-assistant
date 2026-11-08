@@ -51,19 +51,18 @@ and changing behaviour.
 
 ## Where it's going
 
-**Next**
-- Tune the detectors against more real recordings, across tracks and car classes.
-- Tyre temperature and pressure analysis from race sessions.
-- Per-car setup knowledge: real click ranges and values instead of generic "clicks".
-- Lap and run comparison: did the change actually help, and where?
+The full plan, with an issue per item, is in [docs/roadmap.md](docs/roadmap.md). In short:
 
-**Later**
-- More games. Le Mans Ultimate / rFactor 2 and Assetto Corsa (Competizione) store setups as
-  plain text, so there the app could also write the corrected setup file directly.
-- Linux support (the app is Rust + Tauri; RaceRoom under Proton needs the shared memory bridged).
-- Shareable track notes (corner names, known bumps) and installers.
+1. **Data you can trust**: missing or stale telemetry is visible, saves survive crashes.
+2. **Sessions per car and track**: history follows the car you drive, logs the clicks you
+   actually made, and only calls a problem fixed after telemetry has checked it.
+3. **Evidence**: detectors validated on real laps from several tracks, and every detection
+   shows why it appeared. Then a **public alpha** with a Windows installer.
+4. **Better tuning**: car class profiles (only adjustments your car has, real limits), run
+   comparison per corner, tyre analysis.
+5. **Le Mans Ultimate** as the second game.
 
-Ideas and feedback are welcome: open an issue.
+Later: Linux (RaceRoom under Proton), in-app replay. Ideas and feedback are welcome: open an issue.
 
 ## Getting started
 
@@ -90,6 +89,7 @@ For the overlay, run RaceRoom in borderless or windowed mode.
 - [CONTRIBUTING.md](CONTRIBUTING.md): developer setup, project layout, how to add rules or a game.
 - [ADR.md](ADR.md): the important design decisions and why they were made.
 - [docs/how-it-works.md](docs/how-it-works.md): detection, track map, runs, recordings and tuning.
+- [docs/roadmap.md](docs/roadmap.md): the plan, milestones and issues.
 
 ## Data and privacy
 

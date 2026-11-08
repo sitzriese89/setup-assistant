@@ -67,6 +67,11 @@ pub struct Sample {
     /// Height of the car above some fixed level, metres. Builds the track's elevation map.
     #[serde(default)]
     pub elevation: Option<f32>,
+    /// Road-wheel angle in degrees at full steering input, one side (0 = unknown). With
+    /// `steer_range_deg` this gives the steering ratio, so understeer can be measured at the
+    /// front wheels instead of the steering wheel (#35).
+    #[serde(default)]
+    pub steer_lock_deg: f32,
 }
 
 fn unknown() -> f32 {
@@ -95,7 +100,17 @@ impl Default for Sample {
             vert_accel: 0.0,
             lap_distance: unknown(),
             elevation: None,
+            steer_lock_deg: 0.0,
         }
+    }
+}
+
+impl Sample {
+    /// Steering-wheel degrees per road-wheel degree, when both the wheel range and the
+    /// steering lock are known.
+    pub fn steering_ratio(&self) -> Option<f32> {
+        (self.steer_range_deg > 0.0 && self.steer_lock_deg > 0.0)
+            .then(|| self.steer_range_deg / 2.0 / self.steer_lock_deg)
     }
 }
 
@@ -110,6 +125,8 @@ pub struct Channels {
     pub tyre_temp: bool,
     pub tyre_pressure: bool,
     pub steer_range: bool,
+    #[serde(default)]
+    pub steer_lock: bool,
 }
 
 impl Default for Channels {
@@ -127,6 +144,7 @@ impl Channels {
         tyre_temp: true,
         tyre_pressure: true,
         steer_range: true,
+        steer_lock: true,
     };
 
     /// `s` with the missing channels set to their "unknown" values, so a source that fills
@@ -155,6 +173,9 @@ impl Channels {
         if !self.steer_range {
             s.steer_range_deg = 0.0;
         }
+        if !self.steer_lock {
+            s.steer_lock_deg = 0.0;
+        }
         s
     }
 
@@ -173,6 +194,7 @@ impl Channels {
         add(self.tyre_temp, "Tyre temperatures (not provided)");
         add(self.tyre_pressure, "Tyre pressures (not provided)");
         add(self.steer_range, "Exact steering angle (no wheel rotation; assuming 540°)");
+        add(self.steer_lock, "Steering ratio (no steering lock; understeer stays in steering-wheel degrees)");
         out
     }
 }
@@ -474,6 +496,17 @@ impl Analyzer {
     /// Lap distance of the latest sample, if known.
     pub fn last_lap_distance(&self) -> Option<f32> {
         self.last.as_ref().map(|(s, _)| s.lap_distance).filter(|d| *d >= 0.0)
+    }
+
+    /// Steering-wheel degrees per road-wheel degree of the latest sample, when known.
+    /// Divide a steering-wheel °/g value by it to get road-wheel °/g (#35).
+    pub fn steering_ratio(&self) -> Option<f32> {
+        self.last.as_ref().and_then(|(s, _)| s.steering_ratio())
+    }
+
+    /// Whether the latest sample had to assume the steering wheel's range.
+    pub fn wheel_range_assumed(&self) -> bool {
+        self.last.as_ref().is_some_and(|(s, _)| s.steer_range_deg <= 0.0)
     }
 
     /// Learned geometric yaw gain (rad/s per m/s per unit steering), for diagnostics.

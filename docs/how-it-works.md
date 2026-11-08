@@ -33,6 +33,10 @@ rejected, so typos fail the `builtin_rules_are_valid` test.
   car that understeers everywhere still reads high. (The first version compared corners
   against the car's own medium-speed cornering, so an all-round understeering car looked
   "normal". That was the bug behind missed understeer.)
+  Steering-wheel degrees depend on the car's steering ratio, so the same threshold means
+  slightly different handling on different cars. Recordings now also store the steering lock,
+  and `replay` shows the balance in road-wheel degrees too where the ratio is known. Detection
+  will switch units only after it's checked on real recordings (#35).
 - **Understeer under braking:** when the front wheels turn more than 4% slower than the car
   while braking, the front tyres are busy braking and some understeer is physics, not the
   chassis. Those moments are reported as their own problem (brake bias, ABS, brake release)

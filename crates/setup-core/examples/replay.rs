@@ -41,7 +41,26 @@ fn main() {
         Some(k) => println!("steering geometry learned: {k:.4} (rad/s per m/s per unit steer)"),
         None => println!("steering geometry NOT learned: no gentle curves found"),
     }
-    println!("\nbalance by phase (wheel deg per g, + understeer / - oversteer):");
+    // Steering units (#35): the analyzer works in steering-wheel degrees.
+    let distinct = |f: &dyn Fn(&setup_core::telemetry::Sample) -> f32| {
+        let mut v: Vec<i64> = samples.iter().map(|s| f(s).round() as i64).collect();
+        v.sort_unstable();
+        v.dedup();
+        v.iter().map(|x| if *x <= 0 { "unknown".to_string() } else { format!("{x}°") }).collect::<Vec<_>>().join(", ")
+    };
+    println!("steering wheel range: {}", distinct(&|s| s.steer_range_deg));
+    if a.wheel_range_assumed() {
+        println!("  (range unknown at the end: understeer assumed a 540° wheel)");
+    }
+    println!("steering lock (road wheel): {}", distinct(&|s| s.steer_lock_deg));
+    let ratio = a.steering_ratio();
+    match ratio {
+        Some(k) => println!("steering ratio: {k:.1}:1"),
+        None => println!("steering ratio: unknown (recording has no steering lock), road-wheel values not shown"),
+    }
+
+    println!("\nbalance by phase (deg per g, + understeer / - oversteer):");
+    println!("  {:<22} {:>8} {:>8}", "", "wheel", "road");
     for b in &r.balance_by_phase {
         let phase = match b.phase {
             Phase::Braking => "braking*",
@@ -49,9 +68,11 @@ fn main() {
             Phase::Mid => "mid",
             _ => "exit",
         };
-        println!("  {phase:<6} {:?}: {:+6.1}  ({:.0} s)", b.speed, b.deg_per_g, b.seconds);
+        let road = ratio.map_or("–".to_string(), |k| format!("{:+.2}", b.deg_per_g / k));
+        let what = format!("{phase} {:?}", b.speed);
+        println!("  {what:<22} {:>+8.1} {road:>8}  ({:.0} s)", b.deg_per_g, b.seconds);
     }
-    println!("\ndetected (understeer threshold {} deg/g):", thresholds.understeer_deg_per_g);
+    println!("\ndetected (understeer threshold {} steering-wheel deg/g):", thresholds.understeer_deg_per_g);
     for d in &r.detected {
         let places: Vec<String> =
             d.places.iter().take(3).map(|p| format!("{:.0} m ({}x)", p.distance_m, p.count)).collect();

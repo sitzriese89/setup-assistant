@@ -203,6 +203,8 @@ mod telemetry_tests {
         assert!((back[500].lap_distance - lap[500].lap_distance).abs() < 0.01);
         assert!((back[500].vert_accel - lap[500].vert_accel).abs() < 1e-3);
         assert!((back[500].elevation.unwrap() - lap[500].elevation.unwrap()).abs() < 1e-2);
+        assert!((back[500].steer_lock_deg - lap[500].steer_lock_deg).abs() < 1e-3);
+        assert!(back[500].steering_ratio().is_some());
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -287,15 +289,20 @@ mod telemetry_tests {
             cols[..34].join(","),    // oldest layout: still fine
             with(36, ""),            // no elevation: fine
             format!("{good},extra"), // extra column: ignored
+            cols[..37].join(","),    // before the steering lock column: fine
+            with(37, "y"),           // malformed steering lock
         ];
         std::fs::write(&path, format!("{header}\n{}\n", rows.join("\n"))).unwrap();
         let r = recording::read_checked(&path).unwrap();
-        assert_eq!(r.samples.len(), 4);
-        assert_eq!(r.rejected, 3);
+        assert_eq!(r.samples.len(), 5);
+        assert_eq!(r.rejected, 4);
         assert!(r.first_problem.as_deref().unwrap().contains("throttle"), "{:?}", r.first_problem);
         assert!(r.samples[1].lap_distance < 0.0, "oldest layout has no lap distance");
         assert!(r.samples[2].elevation.is_none());
         assert!((r.samples[3].speed - r.samples[0].speed).abs() < 1e-6);
+        assert!(r.samples[0].steer_lock_deg > 0.0);
+        assert_eq!(r.samples[4].steer_lock_deg, 0.0, "37-column layout has no steering lock");
+        assert!(r.samples[4].steering_ratio().is_none());
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -329,6 +336,24 @@ mod telemetry_tests {
         assert_eq!(no_ride.unavailable().len(), 1);
         assert!(no_ride.unavailable()[0].starts_with("Bottoming"));
         assert!(telemetry::Channels::ALL.unavailable().is_empty());
+    }
+
+    #[test]
+    fn steering_ratio_needs_range_and_lock() {
+        let s = &demo::lap(0.0)[500];
+        // Demo: 540° wheel, 0.3 rad (17.2°) road-wheel lock.
+        let ratio = s.steering_ratio().unwrap();
+        assert!((ratio - 270.0 / 0.3f32.to_degrees()).abs() < 1e-3, "{ratio}");
+        let no_lock = telemetry::Channels { steer_lock: false, ..telemetry::Channels::ALL };
+        assert_eq!(no_lock.mask(s).steering_ratio(), None, "a masked lock is ignored");
+        assert!(no_lock.unavailable()[0].starts_with("Steering ratio"));
+        let no_range = Sample { steer_range_deg: 0.0, ..s.clone() };
+        assert_eq!(no_range.steering_ratio(), None, "unknown wheel range: no ratio");
+
+        let mut a = Analyzer::default();
+        demo::lap(0.0).iter().for_each(|x| a.push(x));
+        assert_eq!(a.steering_ratio(), Some(ratio));
+        assert!(!a.wheel_range_assumed());
     }
 
     /// Plays three demo laps quickly, without ride height, then goes quiet.

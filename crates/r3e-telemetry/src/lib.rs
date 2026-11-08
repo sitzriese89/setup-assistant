@@ -45,6 +45,9 @@ pub fn to_sample(d: &Shared) -> Sample {
         vert_accel: local_accel.y as f32,
         lap_distance: d.lap_distance,
         elevation: Some(p.position.y as f32),
+        // Assumed: front-wheel lock (one side) at full steering input. To be confirmed on
+        // real cars (#35); the ratio range/2/lock should come out around 10-20.
+        steer_lock_deg: if d.steer_lock_degrees > 0 { d.steer_lock_degrees as f32 } else { 0.0 },
     }
 }
 
@@ -80,6 +83,7 @@ pub fn identity(d: &Shared) -> SourceIdentity {
         }),
         tyre_pressure: pressure.iter().all(|p| *p > 0.0),
         steer_range: d.steer_wheel_range_degrees > 0,
+        steer_lock: d.steer_lock_degrees > 0,
     };
     let (major, minor) = (d.version_major, d.version_minor);
     SourceIdentity {
@@ -274,6 +278,8 @@ mod tests {
         assert_eq!(offset_of!(Shared, throttle), 1500);
         assert_eq!(offset_of!(Shared, brake), 1508);
         assert_eq!(offset_of!(Shared, steer_input_raw), 1524);
+        assert_eq!(offset_of!(Shared, steer_lock_degrees), 1528);
+        assert_eq!(offset_of!(Shared, steer_wheel_range_degrees), 1532);
         assert_eq!(offset_of!(Shared, tire_speed), 1648);
         assert_eq!(offset_of!(Shared, tire_pressure), 1712);
         assert_eq!(offset_of!(Shared, tire_temp), 1744);
@@ -309,6 +315,7 @@ mod tests {
         d.vehicle_info.class_id = 1703;
         d.lap_distance = 120.0;
         d.steer_wheel_range_degrees = 540;
+        d.steer_lock_degrees = 18;
         for i in 0..4 {
             d.tire_temp[i].current_temp = [80.0, 82.0, 84.0];
             d.tire_pressure[i] = 180.0;
@@ -326,10 +333,14 @@ mod tests {
         // -1 = not available in r3e.h.
         d.tire_pressure = [-1.0; 4];
         d.lap_distance = -1.0;
+        assert_eq!(super::to_sample(&d).steering_ratio(), Some(15.0), "540° / 2 / 18°");
         d.steer_wheel_range_degrees = 0;
+        d.steer_lock_degrees = 0;
         d.session_type = -1;
         let id = super::identity(&d);
         assert!(!id.channels.tyre_pressure && !id.channels.lap_distance && !id.channels.steer_range);
+        assert!(!id.channels.steer_lock);
+        assert_eq!(super::to_sample(&d).steering_ratio(), None);
         assert!(id.channels.tyre_temp && id.channels.ride_height);
         assert_eq!(id.session, SessionKind::Unknown);
     }

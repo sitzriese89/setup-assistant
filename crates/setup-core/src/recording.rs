@@ -10,7 +10,7 @@ use crate::telemetry::Sample;
 const HEADER: &str = "time,speed,throttle,brake,steer,yaw_rate,lat_accel,lat_velocity,\
 ws_fl,ws_fr,ws_rl,ws_rr,\
 t_fl_in,t_fl_mid,t_fl_out,t_fr_in,t_fr_mid,t_fr_out,t_rl_in,t_rl_mid,t_rl_out,t_rr_in,t_rr_mid,t_rr_out,\
-p_fl,p_fr,p_rl,p_rr,rh_fl,rh_fr,rh_rl,rh_rr,gear,steer_range_deg,vert_accel,lap_distance,elevation";
+p_fl,p_fr,p_rl,p_rr,rh_fl,rh_fr,rh_rl,rh_rr,gear,steer_range_deg,vert_accel,lap_distance,elevation,steer_lock_deg";
 
 pub struct Recorder {
     out: BufWriter<File>,
@@ -41,6 +41,7 @@ impl Recorder {
         f.push(format!("{:.4}", s.vert_accel));
         f.push(format!("{:.2}", s.lap_distance));
         f.push(s.elevation.map(|e| format!("{e:.3}")).unwrap_or_default());
+        f.push(format!("{}", s.steer_lock_deg));
         writeln!(self.out, "{}", f.join(","))
     }
 
@@ -66,8 +67,8 @@ pub fn read(path: &Path) -> io::Result<Vec<Sample>> {
 
 /// Reads a recording back. Every value is read from its own column, so a bad value
 /// rejects its row instead of shifting the others. Supported layouts: 34 columns (oldest,
-/// no vertical acceleration and lap distance), 36 (no elevation) and 37 (current); extra
-/// columns are ignored. Elevation may be empty.
+/// no vertical acceleration and lap distance), 36 (no elevation), 37 (no steering lock) and
+/// 38 (current); extra columns are ignored. Elevation and steering lock may be empty.
 pub fn read_checked(path: &Path) -> io::Result<Imported> {
     let mut out = Imported::default();
     let names: Vec<&str> = HEADER.split(',').collect();
@@ -88,8 +89,9 @@ pub fn read_checked(path: &Path) -> io::Result<Imported> {
             l if l >= 37 => 36,
             _ => {
                 out.rejected += 1;
-                out.first_problem
-                    .get_or_insert_with(|| format!("line {}: {} columns, expected 34, 36 or 37", n + 2, cols.len()));
+                out.first_problem.get_or_insert_with(|| {
+                    format!("line {}: {} columns, expected 34, 36, 37 or 38", n + 2, cols.len())
+                });
                 continue;
             }
         };
@@ -104,16 +106,21 @@ pub fn read_checked(path: &Path) -> io::Result<Imported> {
                 }
             }
         }
-        let elevation = match cols.get(36).copied() {
+        // Optional columns: absent or empty = unknown, anything else must be a number.
+        let mut optional = |i: usize| match cols.get(i).copied() {
             None | Some("") => None,
             Some(x) => match x.parse::<f32>() {
                 Ok(e) if e.is_finite() => Some(e),
                 _ => {
-                    bad.get_or_insert_with(|| format!("line {}, column 37 (elevation): '{x}' is not a number", n + 2));
+                    bad.get_or_insert_with(|| {
+                        format!("line {}, column {} ({}): '{x}' is not a number", n + 2, i + 1, names[i])
+                    });
                     None
                 }
             },
         };
+        let elevation = optional(36);
+        let steer_lock = optional(37);
         if let Some(problem) = bad {
             out.rejected += 1;
             out.first_problem.get_or_insert(problem);
@@ -132,6 +139,7 @@ pub fn read_checked(path: &Path) -> io::Result<Imported> {
             wheel_speed: [f(8), f(9), f(10), f(11)],
             gear: v[32] as i32,
             steer_range_deg: f(33),
+            steer_lock_deg: steer_lock.unwrap_or(0.0),
             ..Default::default()
         };
         if v.len() >= 36 {

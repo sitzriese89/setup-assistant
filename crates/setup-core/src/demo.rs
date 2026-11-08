@@ -260,6 +260,7 @@ fn base(v: f32, throttle: f32, brake: f32) -> Sample {
         ride_height: [0.05, 0.05, 0.07, 0.07],
         gear: ((v / 12.0) as i32 + 1).clamp(1, 6),
         steer_range_deg: WHEEL_RANGE_DEG,
+        steer_lock_deg: STEER_RANGE.to_degrees(),
         // Like an accelerometer: reads +1 g on level road.
         vert_accel: 9.81,
         ..Default::default()

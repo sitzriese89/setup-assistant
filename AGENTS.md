@@ -2,7 +2,8 @@
 
 Setup Assistant: a Rust + Tauri 2 desktop app that suggests sim racing setup changes from
 described problems and live telemetry (RaceRoom first). Read [ADR.md](ADR.md) before changing
-direction; [CONTRIBUTING.md](CONTRIBUTING.md) has the full developer guide.
+direction; [CONTRIBUTING.md](CONTRIBUTING.md) has the full developer guide. The plan is in
+[docs/roadmap.md](docs/roadmap.md): one GitHub issue per item, worked one issue per PR.
 
 ## Ground rules
 

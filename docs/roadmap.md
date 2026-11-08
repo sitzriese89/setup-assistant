@@ -75,6 +75,7 @@ Detectors are checked against real laps, and drivers can see why something was f
 | M3.4 Severity per pass vs per minute | [#20][20] | M2.4, M3.2 |
 | M3.5 Rule coverage, no-aero fallback, ranking diagnostics | [#21][21] | |
 | M3.6 Collect recordings on 3 tracks (driver task) | [#22][22] | M3.1 |
+| M3.7 Understeer in road-wheel degrees, not steering-wheel degrees | [#35][35] | M1.1 |
 
 **Alpha gate:** M1–M3 done, and `evaluate` shows no unexpected false detections on real
 recordings from at least 3 tracks.
@@ -143,3 +144,4 @@ recordings from at least 3 tracks.
 [30]: https://github.com/sitzriese89/setup-assistant/issues/30
 [31]: https://github.com/sitzriese89/setup-assistant/issues/31
 [32]: https://github.com/sitzriese89/setup-assistant/issues/32
+[35]: https://github.com/sitzriese89/setup-assistant/issues/35

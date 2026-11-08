@@ -9,8 +9,26 @@
 //! - `Pushing`: the same car after the oversteer is fixed: understeers through
 //!   the middle and exit of every corner.
 
-use crate::telemetry::Sample;
+use crate::live::{CarInfo, SessionKind, SourceIdentity};
+use crate::telemetry::{Channels, Sample};
 use crate::track::TrackInfo;
+
+/// Identity of the demo source on `track`.
+pub fn identity(track: TrackInfo) -> SourceIdentity {
+    SourceIdentity {
+        game: "Demo".into(),
+        api_version: "1".into(),
+        car: Some(CarInfo {
+            id: "demo-car".into(),
+            name: Some("Demo GT car".into()),
+            class_id: "demo-class".into(),
+            class_name: Some("Demo GT".into()),
+        }),
+        track: Some(track),
+        session: SessionKind::Practice,
+        channels: Channels::ALL,
+    }
+}
 
 const DT: f64 = 0.01;
 const WHEELBASE: f32 = 2.7;
@@ -285,6 +303,11 @@ impl DemoSource {
 
     pub fn track(&self) -> TrackInfo {
         self.track.clone()
+    }
+
+    /// The demo is its own game, car and track, with every channel.
+    pub fn identity(&self) -> SourceIdentity {
+        identity(self.track.clone())
     }
 
     /// Switches the car for the next lap (e.g. after "next run").

@@ -92,7 +92,9 @@ what you felt in the car.
 1. New crate `crates/<game>-telemetry`.
 2. Convert the game's data to `setup_core::telemetry::Sample` (SI units; see the field docs).
    Sign conventions don't matter (ADR-6), units do.
-3. Implement `setup_core::live::Source` (`poll()`, and `track()` for the track map).
+3. Implement `setup_core::live::Source`: `poll()`, and `identity()` with the game, API version,
+   car, track, session type and which optional `Channels` the game provides. Missing channels
+   are treated as unknown, so the detectors that need them stay quiet and the driver is told.
 4. Wire it up in `app/src-tauri/src/main.rs`.
 5. Add a layout/conversion test like `crates/r3e-telemetry`'s offset test.
 

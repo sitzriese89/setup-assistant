@@ -309,6 +309,79 @@ mod telemetry_tests {
         assert!(!(1.0..1999.0).contains(&d), "should sit on the line, got {d}");
         assert_eq!(telemetry::cluster(&events, 80.0, None).len(), 3, "without the lap length");
     }
+
+    #[test]
+    fn missing_channels_are_ignored_even_if_filled() {
+        // The demo fills ride heights that touch the ground; a source that says it has no
+        // ride height must not get bottoming from them.
+        let no_ride = telemetry::Channels { ride_height: false, ..telemetry::Channels::ALL };
+        let mut a = Analyzer::default();
+        a.set_channels(no_ride);
+        let mut t0 = 0.0;
+        for _ in 0..3 {
+            let lap = demo::lap(t0);
+            t0 = lap.last().unwrap().time + 0.01;
+            lap.iter().for_each(|s| a.push(s));
+        }
+        let r = a.report();
+        assert!(!found(&r, "bottoming", None, CornerSpeed::Both));
+        assert_eq!(r.detected.len(), 5);
+        assert_eq!(no_ride.unavailable().len(), 1);
+        assert!(no_ride.unavailable()[0].starts_with("Bottoming"));
+        assert!(telemetry::Channels::ALL.unavailable().is_empty());
+    }
+
+    /// Plays three demo laps quickly, without ride height, then goes quiet.
+    struct NoRideHeight {
+        samples: Vec<Sample>,
+        next: usize,
+    }
+
+    impl live::Source for NoRideHeight {
+        fn poll(&mut self) -> live::Poll {
+            let end = (self.next + 3000).min(self.samples.len());
+            let chunk = self.samples[self.next..end].to_vec();
+            self.next = end;
+            live::Poll::Samples(chunk)
+        }
+        fn identity(&self) -> Option<live::SourceIdentity> {
+            let mut id = demo::identity(demo::track_info());
+            id.game = "Test".into();
+            id.channels.ride_height = false;
+            Some(id)
+        }
+    }
+
+    #[test]
+    fn live_session_reports_source_and_unavailable_channels() {
+        let mut samples = Vec::new();
+        let mut t0 = 0.0;
+        for _ in 0..3 {
+            let lap = demo::lap(t0);
+            t0 = lap.last().unwrap().time + 0.01;
+            samples.extend(lap);
+        }
+        let total = samples.len();
+        let session = live::LiveSession::start(Box::new(NoRideHeight { samples, next: 0 }), None);
+        let rules = RuleBook::builtin();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let status = loop {
+            let st = session.status(&rules);
+            // All samples analysed: driving time covers (almost) the three laps.
+            if st.report.driving_seconds >= (total as f32 * 0.01) * 0.9 || std::time::Instant::now() > deadline {
+                break st;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
+        let source = status.source.as_ref().expect("identity reported");
+        assert_eq!(source.game, "Test");
+        assert_eq!(source.car.as_ref().unwrap().id, "demo-car");
+        assert_eq!(source.track.as_ref().unwrap().id, "demo");
+        assert!(status.unavailable.iter().any(|u| u.starts_with("Bottoming")), "{:?}", status.unavailable);
+        let behaviors: Vec<_> = status.report.detected.iter().map(|d| d.symptom.behavior.as_str()).collect();
+        assert!(!behaviors.contains(&"bottoming"), "{behaviors:?}");
+        assert!(behaviors.contains(&"front_lockup"), "analysis ran: {behaviors:?}");
+    }
 }
 
 #[cfg(test)]

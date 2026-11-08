@@ -99,6 +99,84 @@ impl Default for Sample {
     }
 }
 
+/// Which optional channels a source fills in. Speed, pedals, steering, yaw rate, lateral
+/// acceleration and velocity, and wheel speeds are always required.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Channels {
+    pub ride_height: bool,
+    pub lap_distance: bool,
+    pub elevation: bool,
+    pub vert_accel: bool,
+    pub tyre_temp: bool,
+    pub tyre_pressure: bool,
+    pub steer_range: bool,
+}
+
+impl Default for Channels {
+    fn default() -> Self {
+        Self::ALL
+    }
+}
+
+impl Channels {
+    pub const ALL: Self = Self {
+        ride_height: true,
+        lap_distance: true,
+        elevation: true,
+        vert_accel: true,
+        tyre_temp: true,
+        tyre_pressure: true,
+        steer_range: true,
+    };
+
+    /// `s` with the missing channels set to their "unknown" values, so a source that fills
+    /// them with placeholders can't produce detections from them.
+    pub fn mask(&self, s: &Sample) -> Sample {
+        let mut s = s.clone();
+        if !self.ride_height {
+            s.ride_height = [-1.0; 4];
+        }
+        if !self.lap_distance {
+            s.lap_distance = -1.0;
+        }
+        if !self.elevation {
+            s.elevation = None;
+        }
+        if !self.vert_accel {
+            // A constant reading: the level is learned as that, so nothing looks like a crest.
+            s.vert_accel = 0.0;
+        }
+        if !self.tyre_temp {
+            s.tyre_temp = [[0.0; 3]; 4];
+        }
+        if !self.tyre_pressure {
+            s.tyre_pressure = [0.0; 4];
+        }
+        if !self.steer_range {
+            s.steer_range_deg = 0.0;
+        }
+        s
+    }
+
+    /// What can't be done with the channels that are missing, for the driver.
+    pub fn unavailable(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut add = |ok: bool, what: &str| {
+            if !ok {
+                out.push(what.to_string());
+            }
+        };
+        add(self.ride_height, "Bottoming detection (no ride height)");
+        add(self.lap_distance, "Where problems happen and the track map (no lap position)");
+        add(self.elevation, "Track elevation profile (no car position)");
+        add(self.vert_accel, "Crest detection (no vertical acceleration)");
+        add(self.tyre_temp, "Tyre temperatures (not provided)");
+        add(self.tyre_pressure, "Tyre pressures (not provided)");
+        add(self.steer_range, "Exact steering angle (no wheel rotation; assuming 540°)");
+        out
+    }
+}
+
 /// What the car is doing right now, for the live display.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiveFrame {
@@ -308,6 +386,8 @@ pub struct Analyzer {
     event_places: HashMap<EventKey, Vec<f32>>,
     /// Lap length in metres, if known: places just before and after the start line are one place.
     track_length: Option<f32>,
+    /// Optional channels the source provides; the others are treated as unknown.
+    channels: Channels,
     last_event: Option<LastEvent>,
     /// Vertical acceleration on flat straights, to learn the "level road" reading.
     verts: Vec<f32>,
@@ -353,6 +433,7 @@ impl Analyzer {
             events: HashMap::new(),
             event_places: HashMap::new(),
             track_length: None,
+            channels: Channels::ALL,
             last_event: None,
             verts: Vec::new(),
             vert_cursor: 0,
@@ -374,9 +455,15 @@ impl Analyzer {
     }
 
     pub fn reset(&mut self) {
-        let track_length = self.track_length;
+        let (track_length, channels) = (self.track_length, self.channels);
         *self = Self::new(self.thresholds.clone());
         self.track_length = track_length;
+        self.channels = channels;
+    }
+
+    /// Optional channels the source provides. Survives [`reset`](Self::reset).
+    pub fn set_channels(&mut self, channels: Channels) {
+        self.channels = channels;
     }
 
     /// Lap length in metres (None or <= 0 = unknown). Survives [`reset`](Self::reset).
@@ -441,6 +528,13 @@ impl Analyzer {
     }
 
     pub fn push(&mut self, s: &Sample) {
+        let masked;
+        let s = if self.channels == Channels::ALL {
+            s
+        } else {
+            masked = self.channels.mask(s);
+            &masked
+        };
         let dt = match self.last_time {
             Some(t) if s.time > t => (s.time - t) as f32,
             Some(t) if s.time == t => return, // duplicate frame (paused, or polled twice)

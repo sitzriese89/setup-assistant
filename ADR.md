@@ -311,3 +311,20 @@ changed" although it never compares clean runs or changes.
 
 **Consequences.** No detection thresholds changed. Old recordings still load. A recurring spot
 stays a hint until clean runs, car identity and changes are compared.
+
+## ADR-19: Sources describe themselves; missing channels are masked
+
+**Context.** History is going to be scoped to car + track (roadmap M2), and a second game
+(LMU) may not provide every channel RaceRoom does. The core only knew the track.
+
+**Decision.** `Source::identity()` returns a `SourceIdentity`: game, telemetry API version,
+car (stable game-prefixed IDs, names when the game gives them), track, session type and
+`Channels`, the optional channels the source fills in. Required channels (speed, pedals,
+steering, yaw, lateral acceleration and velocity, wheel speeds) aren't listed. The analyzer and
+track map see missing channels as their "unknown" value (`Channels::mask`), so detectors that
+need them stay quiet without per-detector checks. `LiveStatus` carries the identity and a
+plain-language list of what is unavailable. RaceRoom reports car and class IDs only; names
+come later with the class profiles (roadmap M5.1).
+
+**Consequences.** Adapters must declare their channels honestly; per-frame values RaceRoom
+marks as -1 turn the channel off. Recordings keep the raw values.

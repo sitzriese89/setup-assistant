@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::demo::{DemoSource, Variant};
 use crate::recording::Recorder;
 use crate::rules::RuleBook;
-use crate::telemetry::{Analyzer, LiveReport, PhaseBalance, Sample};
+use crate::telemetry::{Analyzer, Channels, LiveReport, PhaseBalance, Sample};
 use crate::track::{TrackInfo, TrackMap, TrackView};
 
 /// What a game adapter returns on each poll.
@@ -26,11 +26,52 @@ pub enum Poll {
     Samples(Vec<Sample>),
 }
 
+/// Kind of session in the game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionKind {
+    Practice,
+    Qualifying,
+    Race,
+    Warmup,
+    #[default]
+    Unknown,
+}
+
+/// The car being driven. IDs are stable per game; names may be unknown.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CarInfo {
+    /// Game-prefixed, stable, e.g. "r3e-car-1234".
+    pub id: String,
+    pub name: Option<String>,
+    /// Game-prefixed class ID, e.g. "r3e-class-1703".
+    pub class_id: String,
+    pub class_name: Option<String>,
+}
+
+/// What a source knows about where the data comes from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SourceIdentity {
+    /// Display name, e.g. "RaceRoom".
+    pub game: String,
+    /// Version of the game's telemetry API, e.g. "3.6".
+    pub api_version: String,
+    pub car: Option<CarInfo>,
+    pub track: Option<TrackInfo>,
+    pub session: SessionKind,
+    /// Optional channels this source fills in.
+    pub channels: Channels,
+}
+
 pub trait Source: Send {
     fn poll(&mut self) -> Poll;
+    /// Game, car, track, session and channels, once connected.
+    fn identity(&self) -> Option<SourceIdentity> {
+        None
+    }
     /// The track being driven, once known.
     fn track(&self) -> Option<TrackInfo> {
-        None
+        self.identity().and_then(|i| i.track)
     }
 }
 
@@ -66,6 +107,10 @@ pub struct LiveStatus {
     pub track: Option<TrackView>,
     /// Where the car is on the lap right now (m).
     pub car_at: Option<f32>,
+    /// Game, car, track and session, once known.
+    pub source: Option<SourceIdentity>,
+    /// What the source's missing channels rule out, for the driver.
+    pub unavailable: Vec<String>,
 }
 
 struct Inner {
@@ -82,9 +127,21 @@ struct Inner {
     track_dir: Option<PathBuf>,
     track: Option<TrackMap>,
     last_track_save: Instant,
+    identity: Option<SourceIdentity>,
 }
 
 impl Inner {
+    /// Takes the source's identity: track map, lap length and available channels.
+    fn set_identity(&mut self, identity: Option<SourceIdentity>) {
+        let Some(identity) = identity else { return };
+        if self.identity.as_ref() == Some(&identity) {
+            return;
+        }
+        self.analyzer.set_channels(identity.channels);
+        self.set_track(identity.track.clone());
+        self.identity = Some(identity);
+    }
+
     fn recorder(&mut self) -> Option<&mut Recorder> {
         if self.demo.is_some() {
             return None;
@@ -172,6 +229,7 @@ impl LiveSession {
             track_dir,
             track: None,
             last_track_save: Instant::now(),
+            identity: None,
         }));
         let shared = inner.clone();
         std::thread::Builder::new()
@@ -183,22 +241,36 @@ impl LiveSession {
                         Some(demo) => Poll::Samples(demo.due()),
                         None => source.poll(),
                     };
-                    let info = match st.demo.as_ref() {
-                        Some(demo) => Some(demo.track()),
-                        None => source.track(),
-                    };
-                    st.set_track(info);
+                    match st.demo.as_ref() {
+                        Some(demo) => {
+                            let id = demo.identity();
+                            st.set_identity(Some(id));
+                        }
+                        None => match source.identity() {
+                            Some(id) => st.set_identity(Some(id)),
+                            // Sources that only know the track.
+                            None => st.set_track(source.track()),
+                        },
+                    }
                     match poll {
-                        Poll::NotRunning => st.connection = Connection::Waiting,
+                        Poll::NotRunning => {
+                            st.connection = Connection::Waiting;
+                            st.identity = None;
+                        }
                         Poll::Idle => st.connection = Connection::Connected,
                         Poll::Samples(samples) => {
                             if !samples.is_empty() {
                                 st.last_sample = Some(Instant::now());
                             }
+                            let channels = st.identity.as_ref().map_or(Channels::ALL, |i| i.channels);
                             for s in &samples {
                                 st.analyzer.push(s);
                                 if let Some(map) = st.track.as_mut() {
-                                    map.add(s);
+                                    if channels == Channels::ALL {
+                                        map.add(s);
+                                    } else {
+                                        map.add(&channels.mask(s));
+                                    }
                                 }
                                 if let Some(r) = st.recorder() {
                                     let _ = r.write(s);
@@ -249,6 +321,8 @@ impl LiveSession {
             recording: st.recorder.as_ref().map(|(_, p)| p.display().to_string()),
             track: st.track.as_ref().map(|m| m.view()),
             car_at,
+            unavailable: st.identity.as_ref().map(|i| i.channels.unavailable()).unwrap_or_default(),
+            source: st.identity.clone(),
         }
     }
 
@@ -328,6 +402,9 @@ impl LiveSession {
         let variant = demo_variant(st.run);
         st.close_recording();
         st.demo = on.then(|| DemoSource::new(2.0, variant));
+        // The next poll brings the identity (and channels) of whatever is now the source.
+        st.identity = None;
+        st.analyzer.set_channels(Channels::ALL);
         st.analyzer.reset();
         st.last_sample = None;
     }

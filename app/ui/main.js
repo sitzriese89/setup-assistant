@@ -541,6 +541,26 @@ const CONN_TEXT = {
   driving: "Receiving telemetry",
 };
 
+const SESSION_TEXT = { practice: "Practice", qualifying: "Qualifying", race: "Race", warmup: "Warm-up" };
+
+/// "RaceRoom 3.6 · Car 5234 (class 1703) · Mount Panorama · Practice", plus what's not available.
+function renderSource(st) {
+  const s = st.source;
+  const line = $("#source-line");
+  const missing = $("#unavailable");
+  const key = JSON.stringify([s, st.unavailable]);
+  if (key === renderSource.key) return;
+  renderSource.key = key;
+  line.hidden = !s;
+  missing.hidden = !s || !st.unavailable.length;
+  if (!s) return;
+  const id = (x) => x.replace(/^.*-/, "");
+  const car = s.car && (s.car.name || `Car ${id(s.car.id)} (class ${s.car.class_name || id(s.car.class_id)})`);
+  const parts = [`${s.game} ${s.api_version}`, car, s.track && s.track.name, SESSION_TEXT[s.session]];
+  line.textContent = parts.filter(Boolean).join(" · ");
+  missing.textContent = `Not available from this game: ${st.unavailable.join("; ")}.`;
+}
+
 async function pollLive() {
   const seq = live.runSeq;
   const st = await invoke("live_status");
@@ -554,6 +574,7 @@ async function pollLive() {
   $("#conn-text").textContent = st.demo ? "Demo lap (synthetic data, 2× speed)" : CONN_TEXT[st.connection];
   $("#demo-btn").textContent = st.demo ? "Stop demo" : "Try demo lap";
   $("#tab-dot").className = "live-dot" + (st.demo ? " demo" : st.connection === "driving" ? " on" : "");
+  renderSource(st);
 
   // Needed even when the live tab is closed ("Next run" carries them over).
   live.detected = r.detected;

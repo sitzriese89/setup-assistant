@@ -3,8 +3,8 @@
 pub mod layout;
 
 use layout::Shared;
-use setup_core::live::{Poll, Source};
-use setup_core::telemetry::Sample;
+use setup_core::live::{CarInfo, Poll, SessionKind, Source, SourceIdentity};
+use setup_core::telemetry::{Channels, Sample};
 
 /// Converts one RaceRoom frame into a game-agnostic sample.
 pub fn to_sample(d: &Shared) -> Sample {
@@ -48,9 +48,53 @@ pub fn to_sample(d: &Shared) -> Sample {
     }
 }
 
+/// Game, API version, car, track, session and channels of one RaceRoom frame.
+pub fn identity(d: &Shared) -> SourceIdentity {
+    let car = d.vehicle_info;
+    let (model, class) = (car.model_id, car.class_id);
+    // RaceRoom reports IDs only; names come from its data files (not read here).
+    let car = (model > 0).then(|| CarInfo {
+        id: format!("r3e-car-{model}"),
+        name: None,
+        class_id: format!("r3e-class-{class}"),
+        class_name: None,
+    });
+    let session = match d.session_type {
+        0 => SessionKind::Practice,
+        1 => SessionKind::Qualifying,
+        2 => SessionKind::Race,
+        3 => SessionKind::Warmup,
+        _ => SessionKind::Unknown,
+    };
+    let temps = d.tire_temp;
+    let pressure = d.tire_pressure;
+    // -1 means "not available" in r3e.h.
+    let channels = Channels {
+        ride_height: true,
+        lap_distance: d.layout_length > 0.0 && d.lap_distance >= 0.0,
+        elevation: true,
+        vert_accel: true,
+        tyre_temp: temps.iter().all(|t| {
+            let current = t.current_temp; // copy out of the packed struct
+            current.iter().all(|v| *v > 0.0)
+        }),
+        tyre_pressure: pressure.iter().all(|p| *p > 0.0),
+        steer_range: d.steer_wheel_range_degrees > 0,
+    };
+    let (major, minor) = (d.version_major, d.version_minor);
+    SourceIdentity {
+        game: "RaceRoom".into(),
+        api_version: format!("{major}.{minor}"),
+        car,
+        track: track_info(d),
+        session,
+        channels,
+    }
+}
+
 /// Polls RaceRoom's shared memory. Reconnects on its own when the game starts.
 pub struct R3eSource {
-    track: Option<setup_core::track::TrackInfo>,
+    identity: Option<SourceIdentity>,
     map: Option<platform::Mapping>,
     last_tick: i32,
     next_attempt: std::time::Instant,
@@ -58,7 +102,7 @@ pub struct R3eSource {
 
 impl Default for R3eSource {
     fn default() -> Self {
-        Self { track: None, map: None, last_tick: i32::MIN, next_attempt: std::time::Instant::now() }
+        Self { identity: None, map: None, last_tick: i32::MIN, next_attempt: std::time::Instant::now() }
     }
 }
 
@@ -87,12 +131,13 @@ fn track_info(d: &Shared) -> Option<setup_core::track::TrackInfo> {
 }
 
 impl Source for R3eSource {
-    fn track(&self) -> Option<setup_core::track::TrackInfo> {
-        self.track.clone()
+    fn identity(&self) -> Option<SourceIdentity> {
+        self.identity.clone()
     }
 
     fn poll(&mut self) -> Poll {
         if self.map.is_none() {
+            self.identity = None;
             if std::time::Instant::now() < self.next_attempt {
                 return Poll::NotRunning;
             }
@@ -104,9 +149,11 @@ impl Source for R3eSource {
         }
         let Some(d) = self.map.as_ref().and_then(|m| m.read()) else {
             self.map = None;
+            self.identity = None;
             return Poll::NotRunning;
         };
         if d.version_major != layout::VERSION_MAJOR {
+            self.identity = None;
             return Poll::NotRunning;
         }
         // The memory stays mapped for a moment after the game quits; a frozen
@@ -119,7 +166,7 @@ impl Source for R3eSource {
         if !driving {
             return Poll::Idle;
         }
-        self.track = track_info(&d);
+        self.identity = Some(identity(&d));
         let tick = d.player.game_simulation_ticks;
         if tick == self.last_tick {
             return Poll::Samples(Vec::new());
@@ -211,7 +258,14 @@ mod tests {
         assert_eq!(offset_of!(Shared, player) + offset_of!(PlayerData, local_acceleration), 152);
         assert_eq!(offset_of!(Shared, player) + offset_of!(PlayerData, local_angular_velocity), 272);
         assert_eq!(offset_of!(Shared, player) + offset_of!(PlayerData, ride_height), 488);
+        assert_eq!(offset_of!(Shared, version_minor), 4);
         assert_eq!(offset_of!(Shared, track_name), 600);
+        assert_eq!(offset_of!(Shared, track_id), 728);
+        assert_eq!(offset_of!(Shared, layout_id), 732);
+        assert_eq!(offset_of!(Shared, layout_length), 736);
+        assert_eq!(offset_of!(Shared, session_type), 780);
+        assert_eq!(offset_of!(Shared, vehicle_info) + offset_of!(DriverInfo, class_id), 1264);
+        assert_eq!(offset_of!(Shared, vehicle_info) + offset_of!(DriverInfo, model_id), 1268);
         assert_eq!(offset_of!(Shared, flags), 932);
         assert_eq!(offset_of!(Shared, vehicle_info), 1196);
         assert_eq!(offset_of!(Shared, control_type), 1388);
@@ -238,5 +292,45 @@ mod tests {
         let s = super::to_sample(&d);
         assert_eq!(s.tyre_temp[0], [3.0, 2.0, 1.0], "FL: inner is the right edge");
         assert_eq!(s.tyre_temp[1], [1.0, 2.0, 3.0], "FR: inner is the left edge");
+    }
+
+    #[test]
+    fn identity_from_shared_memory() {
+        use setup_core::live::SessionKind;
+        let mut d: Shared = unsafe { std::mem::zeroed() };
+        d.version_major = 3;
+        d.version_minor = 6;
+        d.track_id = 1693;
+        d.layout_id = 1694;
+        d.layout_length = 6213.0;
+        d.track_name[..14].copy_from_slice(b"Mount Panorama");
+        d.session_type = 0;
+        d.vehicle_info.model_id = 5234;
+        d.vehicle_info.class_id = 1703;
+        d.lap_distance = 120.0;
+        d.steer_wheel_range_degrees = 540;
+        for i in 0..4 {
+            d.tire_temp[i].current_temp = [80.0, 82.0, 84.0];
+            d.tire_pressure[i] = 180.0;
+        }
+        let id = super::identity(&d);
+        assert_eq!(id.game, "RaceRoom");
+        assert_eq!(id.api_version, "3.6");
+        assert_eq!(id.session, SessionKind::Practice);
+        let car = id.car.unwrap();
+        assert_eq!((car.id.as_str(), car.class_id.as_str()), ("r3e-car-5234", "r3e-class-1703"));
+        let track = id.track.unwrap();
+        assert_eq!((track.id.as_str(), track.name.as_str()), ("r3e-1693-1694", "Mount Panorama"));
+        assert!(id.channels.unavailable().is_empty(), "{:?}", id.channels.unavailable());
+
+        // -1 = not available in r3e.h.
+        d.tire_pressure = [-1.0; 4];
+        d.lap_distance = -1.0;
+        d.steer_wheel_range_degrees = 0;
+        d.session_type = -1;
+        let id = super::identity(&d);
+        assert!(!id.channels.tyre_pressure && !id.channels.lap_distance && !id.channels.steer_range);
+        assert!(id.channels.tyre_temp && id.channels.ride_height);
+        assert_eq!(id.session, SessionKind::Unknown);
     }
 }

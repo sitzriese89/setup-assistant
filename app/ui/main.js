@@ -307,6 +307,27 @@ function unfixDetected(detected) {
   toast(`Back again, no longer counted as fixed: ${back.map((b) => b.label).join(", ")}.`, true);
 }
 
+// New session sits next to Next run, so it needs a second click within 4 s.
+function newSessionClicked() {
+  const btn = $("#new-session");
+  if (!btn.classList.contains("confirm")) {
+    btn.classList.add("confirm");
+    btn.textContent = "Click again to clear all runs";
+    clearTimeout(newSessionClicked.timer);
+    newSessionClicked.timer = setTimeout(resetNewSessionButton, 4000);
+    return;
+  }
+  resetNewSessionButton();
+  newSession();
+}
+
+function resetNewSessionButton() {
+  clearTimeout(newSessionClicked.timer);
+  const btn = $("#new-session");
+  btn.classList.remove("confirm");
+  btn.textContent = "New session";
+}
+
 async function newSession() {
   state.tried.clear();
   state.symptoms = [];
@@ -454,7 +475,7 @@ async function init() {
   $("#run-confirm-no").addEventListener("click", () => ($("#run-confirm").hidden = true));
   // The run count lives here (it survives restarts); tell the backend.
   invoke("live_set_run", { run: state.run });
-  $("#new-session").addEventListener("click", newSession);
+  $("#new-session").addEventListener("click", newSessionClicked);
   refresh();
   segmented($("#speed"), (v) => { state.draft.speed = v; });
   segmented($("#severity"), (v) => { state.draft.severity = v; });

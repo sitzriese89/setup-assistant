@@ -26,6 +26,8 @@ good and bad). Statuses: *Accepted*, *Superseded by ADR-n*, *Proposed*.
 | 15 | [A synthetic demo lap is the test fixture](#adr-15-a-synthetic-demo-lap-is-the-test-fixture) | Accepted |
 | 16 | [In-game overlay as a second always-on-top window](#adr-16-in-game-overlay-as-a-second-always-on-top-window) | Accepted |
 | 17 | [Develop the UI in a normal browser](#adr-17-develop-the-ui-in-a-normal-browser) | Accepted |
+| 18 | [Treat bad or missing data as unknown, never as a reading](#adr-18-treat-bad-or-missing-data-as-unknown-never-as-a-reading) | Accepted |
+| 19 | [Sources describe themselves; missing channels are masked](#adr-19-sources-describe-themselves-missing-channels-are-masked) | Accepted |
 
 ---
 
@@ -151,6 +153,13 @@ g of cornering (an understeer gradient). Positive = understeer, negative = overs
 - The geometry learned on two real runs agreed within 5% (0.090 vs 0.094).
 - Needs some gentle curves before it can judge; lap 1 is partly calibration.
 - 30°/g is a first guess. It needs tuning per car class (ADR-14).
+
+**Note (2026-11-11).** The learned geometry is not a constant: on real recordings the gain
+falls by half between 50 and 250 km/h, because in fast gentle curves the understeer term is
+larger than the geometric one. The median is dominated by fast curves, so slow corners read
+20–55°/g towards oversteer. The "agreed within 5%" above was agreement between two equally
+biased medians. Fix planned in #40 (geometry from the zero-speed intercept), which will
+supersede the geometry part of this ADR. See FINDINGS.MD, B1.
 
 ## ADR-9: Work in runs; suggestions know the history
 
@@ -301,7 +310,8 @@ changed" although it never compares clean runs or changes.
   learned about the car is kept. Equal timestamps are still skipped as duplicates.
 - Recordings are read column by column (`recording::read_checked`). A row with a missing,
   malformed or non-finite value is rejected and counted, never shifted. Supported layouts:
-  34, 36 and 37 columns; extra columns are ignored; elevation may be empty.
+  34, 36 and 37 columns (38 since #37, with steering lock); extra columns are ignored;
+  elevation may be empty.
 - A parameter with equally strong opposite votes is left out of the suggestions: there is no
   direction to recommend.
 - With the lap length known, places wrap at the start line, in the analyzer and in run

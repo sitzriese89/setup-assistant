@@ -8,13 +8,13 @@ Kept up to date by the `sim-test` skill (`.claude/skills/sim-test/SKILL.md`). Re
 
 | # | Check | From | How | Pass when |
 |---|---|---|---|---|
-| T1 | Source line under the connection status | #34 | Look at the Live tab in the pits or between runs (only the overlay is visible while driving) | Shows "RaceRoom 3.6 · Car … (class …) · <track> · <session>" with the right track and session type |
-| T2 | "Not available from this game" line | #34 | Look at the Live tab in the pits, in menus and right after leaving the pits | Absent with full data, or steady (no flicker) when shown |
+| T1 | Source line under the connection status | #34, #47 | Look at the Live tab in the pits or between runs (only the overlay is visible while driving), on a fresh start and after a car change | Shows "RaceRoom 3.6 · Car … (class …) · <track> · <session>" with the right car, track and session type. Before #47 is merged the line is empty in the pits on a fresh start and shows the old car after a car change (known bug) |
+| T2 | "Not available from this game" line | #34, #47 | Look at the Live tab in the pits, in menus and right after leaving the pits | Absent with full data, or steady (no flicker) when shown. With #47, before the first drive it may list lap position until the car leaves the pits |
 | T3 | Game clock reset | #2 (ADR-18) | Restart a session or return to pits mid-run, then keep driving | Detection carries on afterwards; no burst of false problems |
 | T4 | Places near the start line | #2 | Look at places listed for problems near the line | Events just before and after the line show as one place |
-| T5 | Bottoming detection | – | Drive Bathurst (the Esses, Forrest's Elbow compression) with a low car | Bottoming only where you feel/hear the car scrape; 8 mm threshold is still unverified. Note: Red Bull Ring 2026-11-10 run 3 flagged bottoming 2x at 3640 m from a kerb strike (front-left ride height −12 mm, vertical jolt 7–18 m/s²). Driver: a driving mistake, not a setup problem; no issue filed. Watch whether kerbs keep showing up as bottoming |
+| T5 | Bottoming detection | – | Drive Bathurst (the Esses, Forrest's Elbow compression) with a low car | Bottoming only where you feel/hear the car scrape; 8 mm threshold is still unverified. Note: Red Bull Ring 2026-11-10 run 3 flagged bottoming 2x at 3640 m from a kerb strike (front-left ride height −12 mm, vertical jolt 7–18 m/s²). Driver: a driving mistake, not a setup problem. Kerbs vs bottoming is now #42; hard strikes read below 0 mm and weren't counted at all (#50). Every low reading in the four AMG recordings is on one wheel with a jolt (kerbs) |
 | T6 | Steering ratio of the 2026 Lamborghini | #35 | Drive the Lambo; Claude replays the recording | Ratio between about 10:1 and 20:1. With the AMG at 19.6:1, this shows how much the steering-wheel threshold differs between cars |
-| T7 | Slow-corner balance reads strong oversteer | 2026-11-08 session | Claude replays; compare with how slow corners feel | Explained: either the car really rotates there, or a measurement problem in tight corners (then file an issue). Hockenheim showed −27 to −40°/g in every slice with few oversteer events; Red Bull Ring −16 to −33°/g in all 3 runs. Driver (Red Bull Ring): "somewhat snappy on throttle", then more of an understeer issue after raising TC. Exit numbers fit the snap; slow mid-corner still read −16°/g (oversteer) after the TC change, which doesn't fit the understeer felt. Likely a measurement problem in tight corners: candidate issue |
+| T7 | Slow-corner balance reads strong oversteer | 2026-11-08 session, #40 | After #40 is merged: Claude replays the Hockenheim and Red Bull Ring recordings; drive slow corners and compare with how they feel | Slow-corner balance matches the feel. **Explained** (2026-11-11 review, FINDINGS.MD B1): a measurement problem. The learned steering geometry depends on speed, so slow corners read about −20 to −55°/g too low; fix in #40. Before: Hockenheim −27 to −40°/g in every slice; Red Bull Ring −16 to −33°/g in all 3 runs, still −16°/g after the TC change when the driver felt "more of an understeer issue" |
 | T8 | Change log matches the changes made | 2026-11-08 session | Tick Tried, then Next run after every garage visit; tell Claude what changed | Change log in the app lists the same changes per run as the driver made |
 
 ## Verified
@@ -36,6 +36,8 @@ Template:
 - Changes: <what changed, between which runs>
 - Driver: <what the user felt, in their words>
 - App: <main detections, balance, places>
+- Replay: <per run: samples, geometry, ratio, balance table and detections from the replay
+  example, or the path of the saved output>
 - Checks: <T# passed / failed / not covered>
 - Next: <what to test next time>
 ```

@@ -2,7 +2,8 @@
 
 Where Setup Assistant is going, in order. Each item is a GitHub issue; milestones group them.
 Background and the original analysis are in [ideas.md](ideas.md). Design decisions land in
-[ADR.md](../ADR.md) as they're made.
+[ADR.md](../ADR.md) as they're made. The review of 2026-11-11 ([FINDINGS.MD](../FINDINGS.MD))
+reordered the plan: see "Order of work" below.
 
 **Audience:** for now the main developer and a few contributors building from source. A public
 alpha (installer for other RaceRoom drivers) follows once history and fix checking are
@@ -12,27 +13,45 @@ trustworthy (see the alpha gate below).
 resets, unknown ride height, strict CSV import, tied votes, places across the start line,
 Next run / suggestion guards, softer recurrence wording.
 
+**Bugs from the 2026-11-11 review** (not roadmap items, one PR each): ABS pulsing (#45),
+recording overwritten by the demo toggle (#46), source line while not driving (#47), ticked
+changes of removed problems (#48), exit slides filed as mid-corner (#49), negative ride height
+(#50, lands with M3.10), hardening (#51).
+
 ## Decisions behind this plan
 
 | Topic | Decision |
 |---|---|
 | Who owns the session | The backend: versioned JSON per session in the app data folder. The UI is a view. Supersedes ADR-10 ([M2.1][m2.1]). |
 | History scope | Per **car + track/layout**. Each context has its own sessions; returning resumes the latest; New session starts fresh. The demo is its own context. |
+| Validate before verifying | Fix checking (M2.4) judges "resolved" from detector events, so the detector is validated first: geometry fit with road-wheel units, phase hysteresis, the episode record and a minimal `evaluate` with replay parity come before M2.4. A missed detection would otherwise read as a fix. |
 | When a problem is fixed | States: open → change tried → awaiting check → improved / resolved / still there. Telemetry judges after **3 clean passes** per place (same phase, similar speed): no events = resolved, ≥ 50% fewer per pass = improved. Problems added by hand wait for the driver. The driver can override any status. Revises ADR-9. |
 | Logging changes | Click stepper on "Tried" (actual clicks), "I changed something else", editable history. |
 | Setup values | Asked only for settings the app suggests, then tracked from logged clicks. |
 | Car knowledge | Class profiles in JSON (GT3, GT4, TCR …) from RaceRoom's class ID, per-car overrides over time. |
 | Track maps | Geometry and corner names shared per track; speed/load per car class; names anchored to positions. |
+| Recording context | A JSON sidecar next to every recording (identity, channels, version, thresholds, resets), written from M1 on so recordings collected now stay usable. |
 | Real recordings | Gzipped excerpts (1–3 MB) committed under `fixtures/real/`, with notes, clean laps and a holdout set. |
 | Driver feedback | Note and quick tags per run, saved next to the recording. |
 | Evidence UI | Expandable evidence line per detection, calibration progress bar. |
-| UI tests | Playwright in `tests/ui` only; the app stays bundler-free. |
+| UI tests | Playwright in `tests/ui` only; the app stays bundler-free. Not before the alpha: #8 gives most of the safety without a JS toolchain. |
 | Recordings retention | Keep everything; warn above 2 GB. |
 | Run comparison | Per-corner before/after table. |
 | Accessibility | Keyboard operation, narrow layout, reduced motion. |
 | Releases | Unsigned NSIS installer on GitHub Releases with checksum; revisit signing before a wider release. |
 | Second game | Le Mans Ultimate, after M1 context work. Writing its setup files needs its own ADR. |
 | Deferred | Linux/Proton bridge, in-app replay timeline. |
+
+## Order of work
+
+1. **M1**, except the items marked *after the alpha*.
+2. **Validation slice of M3:** M3.7 + M3.8 as one change with one ADR (both change what the
+   understeer threshold means, so it is re-checked once), M3.9, M3.3 (the episode record), and
+   a minimal M3.2: `evaluate` over local recordings with replay parity, before the CI baseline.
+3. **M2**, with M2.4 on the validated detector.
+4. **The rest of M3**, then the alpha gate.
+
+Items marked *after the alpha* stay open but don't block it.
 
 ## M1 · Data you can trust
 
@@ -44,9 +63,11 @@ Missing, stale or broken data is visible and never becomes a measurement.
 | M1.2 Show stale telemetry and unsupported game versions | [#4][4] |
 | M1.3 Crash-safe saving and visible save/recording health | [#5][5] |
 | M1.4 Clean worker shutdown and unique recording IDs | [#6][6] |
-| M1.5 Measure live polling cost with both windows open | [#7][7] |
+| M1.5 Measure live polling cost with both windows open · *after the alpha* (recordings show a steady 10 ms interval) | [#7][7] |
 | M1.6 Command parity test between desktop app and ui_preview | [#8][8] |
-| M1.7 Playwright smoke tests for the main workflow | [#9][9] |
+| M1.7 Playwright smoke tests for the main workflow · *after the alpha* | [#9][9] |
+| M1.8 Metadata sidecar with every recording | [#43][43] |
+| M1.9 Ask for a new session when the car or track changes (until M2.2) | [#44][44] |
 
 ## M2 · Sessions and context
 
@@ -58,9 +79,9 @@ problem fixed with evidence.
 | M2.1 ADR: backend owns sessions | [#10][10] | |
 | M2.2 Backend session store per car + track | [#11][11] | M1.1, M1.3, M2.1 |
 | M2.3 Actual clicks, manual changes, editable history | [#12][12] | M2.2 |
-| M2.4 Problem lifecycle with per-place verification (ADR) | [#13][13] | M2.2 |
-| M2.5 Recurring spots need comparable driven runs | [#14][14] | M2.2, M2.4 |
-| M2.6 Track maps: shared geometry, per-class data, anchored names | [#15][15] | M1.1 |
+| M2.4 Problem lifecycle with per-place verification (ADR) | [#13][13] | M2.2, validation slice (M3.2 minimal, M3.3, M3.7, M3.8, M3.9) |
+| M2.5 Recurring spots need comparable driven runs · *after the alpha* | [#14][14] | M2.2, M2.4 |
+| M2.6 Track maps: shared geometry, per-class data, anchored names · *only anchored names before the alpha* | [#15][15] | M1.1 |
 | M2.7 Run notes and quick tags | [#16][16] | M2.2 |
 
 ## M3 · Evidence → alpha gate
@@ -69,16 +90,26 @@ Detectors are checked against real laps, and drivers can see why something was f
 
 | Item | Issue | Depends on |
 |---|---|---|
-| M3.1 `excerpt` tool and real-recording fixtures | [#17][17] | M2.7 |
-| M3.2 `evaluate` tool with baseline check in CI | [#18][18] | M3.1 |
-| M3.3 Detection evidence and calibration progress | [#19][19] | |
-| M3.4 Severity per pass vs per minute | [#20][20] | M2.4, M3.2 |
+| M3.1 `excerpt` tool and real-recording fixtures | [#17][17] | M1.8 |
+| M3.2 `evaluate` tool with baseline check in CI (a minimal version with replay parity first) | [#18][18] | M3.1 for the CI baseline |
+| M3.3 Detection evidence and calibration progress (episode record) | [#19][19] | |
+| M3.4 Severity per pass vs per minute | [#20][20] | M2.4, M3.2, M3.9 |
 | M3.5 Rule coverage, no-aero fallback, ranking diagnostics | [#21][21] | |
-| M3.6 Collect recordings on 3 tracks (driver task) | [#22][22] | M3.1 |
-| M3.7 Understeer in road-wheel degrees, not steering-wheel degrees | [#35][35] | M1.1 |
+| M3.6 Collect recordings on 3 tracks, incl. known-answer runs (driver task, already under way) | [#22][22] | |
+| M3.7 Understeer in road-wheel degrees, not steering-wheel degrees | [#35][35] | M1.1; together with M3.8 |
+| M3.8 Learn the steering geometry from the zero-speed intercept | [#40][40] | together with M3.7 |
+| M3.9 Phase hysteresis: one episode per phase | [#41][41] | |
+| M3.10 Tell kerb strikes apart from bottoming | [#42][42] | |
 
-**Alpha gate:** M1–M3 done, and `evaluate` shows no unexpected false detections on real
-recordings from at least 3 tracks.
+**Alpha gate:** M1–M3 done (except items marked *after the alpha*), and on real recordings
+from at least 3 tracks:
+
+- `evaluate` shows no unexpected false detections. Report the rule-of-three bound with it
+  (no false alert in *T* hours still allows about 3/*T* per hour).
+- One known-answer run per detector moves its detection the right way: a deliberate setup
+  change with a known direction, driven A/B/A (e.g. front anti-roll bar to maximum for
+  understeer). No false detections alone doesn't show the detector can see a problem.
+- The fitted steering geometry matches the car: speed → 0 gives lock / wheelbase (about ±10%).
 
 ## M4 · Public alpha
 
@@ -110,7 +141,13 @@ recordings from at least 3 tracks.
 - One issue per PR; each PR follows [CONTRIBUTING.md](../CONTRIBUTING.md) and the ground rules in
   [AGENTS.md](../AGENTS.md).
 - Items without dependencies inside a milestone can run in parallel.
-- Threshold changes only with `evaluate` output once M3.2 exists.
+- Threshold changes only with `evaluate` output once M3.2 exists; until then, with `replay`
+  output before and after on the local recordings.
+- Detector changes get a demo case that fails without the change. The demo is idealized (its
+  gentle curves had no understeer, its throttle never hovers at a cut-off), so make the case as
+  messy as the real data that showed the problem.
+- Keep driving between PRs ([sim-testing.md](sim-testing.md)): driving found more real
+  problems than code review. Attach replay output to each session entry.
 - When a decision here changes, update this file and add or supersede an ADR.
 
 [m2.1]: https://github.com/sitzriese89/setup-assistant/issues/10
@@ -145,3 +182,8 @@ recordings from at least 3 tracks.
 [31]: https://github.com/sitzriese89/setup-assistant/issues/31
 [32]: https://github.com/sitzriese89/setup-assistant/issues/32
 [35]: https://github.com/sitzriese89/setup-assistant/issues/35
+[40]: https://github.com/sitzriese89/setup-assistant/issues/40
+[41]: https://github.com/sitzriese89/setup-assistant/issues/41
+[42]: https://github.com/sitzriese89/setup-assistant/issues/42
+[43]: https://github.com/sitzriese89/setup-assistant/issues/43
+[44]: https://github.com/sitzriese89/setup-assistant/issues/44

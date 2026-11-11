@@ -313,7 +313,8 @@ pub struct Thresholds {
     pub lockup_min_s: f32,
     pub wheelspin_ratio: f32,
     pub wheelspin_min_s: f32,
-    /// Ride height (m) that counts as touching the ground (0 disables the detector).
+    /// Ride height (m) that counts as touching the ground (0 disables the detector). Both
+    /// wheels of an axle must be below it; one wheel alone is a kerb.
     /// Not checked against real scraping yet; the track map tells compressions apart.
     pub bottoming_height: f32,
     /// Front wheels this much slower than the car while braking = tyres busy braking.
@@ -758,8 +759,12 @@ impl Analyzer {
             self.record("wheelspin", Some(Phase::Exit), CornerSpeed::Both, at);
         }
 
-        let touching =
-            s.speed > 25.0 && s.ride_height.iter().any(|h| (RIDE_HEIGHT_UNKNOWN_BELOW..t.bottoming_height).contains(h));
+        // Bottoming needs both wheels of an axle low at once. One wheel low (or one side of the
+        // car) is a kerb strike, not a setup problem. Real recordings show only those, and their
+        // vertical jolts overlap road noise, so the jolt can't tell them apart (#42, ADR-20).
+        // Small negative heights are hard strikes and count as low (#50).
+        let [fl, fr, rl, rr] = s.ride_height.map(|h| (RIDE_HEIGHT_UNKNOWN_BELOW..t.bottoming_height).contains(&h));
+        let touching = s.speed > 25.0 && ((fl && fr) || (rl && rr));
         if self.detectors.bottoming.update(touching, dt, 0.05) {
             self.record("bottoming", None, CornerSpeed::Both, at);
         }

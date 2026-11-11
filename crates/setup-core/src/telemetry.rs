@@ -396,6 +396,9 @@ struct Detectors {
     bottoming: Episode,
 }
 
+/// Throttle above which a corner (or a slide just after one) counts as the exit.
+const EXIT_THROTTLE: f32 = 0.6;
+
 type EventKey = (String, Option<Phase>, CornerSpeed);
 
 pub struct Analyzer {
@@ -436,8 +439,6 @@ pub struct Analyzer {
     last: Option<(Sample, Option<Phase>)>,
 }
 
-/// Throttle above which a corner (or a slide just after one) counts as the exit.
-const EXIT_THROTTLE: f32 = 0.6;
 const GAIN_CAPACITY: usize = 4000;
 const GAINS_NEEDED: usize = 100;
 

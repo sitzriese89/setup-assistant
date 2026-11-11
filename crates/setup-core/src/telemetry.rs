@@ -390,6 +390,8 @@ struct Detectors {
     oversteer: Episode,
     oversteer_phase: Option<Phase>,
     braking_understeer: Episode,
+    /// Seconds left during which the front tyres still count as busy braking.
+    braking_slip_for: f32,
     front_lock: Episode,
     rear_lock: Episode,
     wheelspin: Episode,
@@ -436,6 +438,9 @@ pub struct Analyzer {
     last: Option<(Sample, Option<Phase>)>,
 }
 
+/// How long front slip under braking holds after the last slipping frame (ABS pulses).
+/// Matches the gap an episode tolerates.
+const BRAKING_SLIP_HOLD_S: f32 = 0.3;
 const GAIN_CAPACITY: usize = 4000;
 const GAINS_NEEDED: usize = 100;
 
@@ -702,8 +707,16 @@ impl Analyzer {
         };
 
         // Front tyres busy braking (ABS / near lockup): understeer here is about braking, not the chassis.
+        // ABS lets the wheels spin back up between pulses, so slip holds for a moment while the
+        // brake stays pressed; otherwise one corner would count as both kinds of understeer.
         let front_mean = (s.wheel_speed[0].abs() + s.wheel_speed[1].abs()) / 2.0;
-        let braking_slip = s.brake > 0.05 && s.speed > 10.0 && front_mean < s.speed * (1.0 - t.front_slip_braking);
+        let on_brakes = s.brake > 0.05 && s.speed > 10.0;
+        if on_brakes && front_mean < s.speed * (1.0 - t.front_slip_braking) {
+            self.detectors.braking_slip_for = BRAKING_SLIP_HOLD_S;
+        } else {
+            self.detectors.braking_slip_for = (self.detectors.braking_slip_for - dt).max(0.0);
+        }
+        let braking_slip = on_brakes && self.detectors.braking_slip_for > 0.0;
         let at = s.lap_distance;
 
         if let (Some(u), true, false) = (understeer_deg_per_g, cornering, light) {

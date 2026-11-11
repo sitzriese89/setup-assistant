@@ -100,6 +100,31 @@ mod telemetry_tests {
     }
 
     #[test]
+    fn abs_pulsing_is_still_braking_understeer() {
+        // ABS: the slipping front wheels spin back up for 40 ms out of every 80 ms.
+        let r = run(3, |s| {
+            let frame = (s.time * 100.0).round() as i64;
+            if s.brake > 0.05 && s.wheel_speed[0] < s.speed * 0.96 && frame % 8 < 4 {
+                s.wheel_speed[0] = s.speed;
+                s.wheel_speed[1] = s.speed;
+            }
+        });
+        let list: Vec<_> = r.detected.iter().map(|d| (&d.symptom.behavior, d.symptom.phase, d.symptom.speed)).collect();
+        assert!(found(&r, "braking_understeer", None, CornerSpeed::Both), "{list:?}");
+        assert!(!found(&r, "understeer", Some(Phase::Entry), CornerSpeed::Slow), "{list:?}");
+        // The slipping corner stays out of the entry balance, as without pulsing.
+        let entry = |r: &LiveReport| {
+            r.balance_by_phase
+                .iter()
+                .find(|b| b.phase == Phase::Entry && b.speed == CornerSpeed::Slow)
+                .unwrap()
+                .deg_per_g
+        };
+        let steady = run(3, |_| {});
+        assert!((entry(&r) - entry(&steady)).abs() < 3.0, "{} vs {}", entry(&r), entry(&steady));
+    }
+
+    #[test]
     fn one_place_problems_are_flagged() {
         // Mixed: exit oversteer only ever happens at corner 4.
         let r = run(3, |_| {});

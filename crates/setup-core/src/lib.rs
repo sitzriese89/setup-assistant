@@ -187,6 +187,19 @@ mod telemetry_tests {
     }
 
     #[test]
+    fn exit_slide_below_cornering_g_is_still_exit_oversteer() {
+        // The rear steps out late on the exit, where cornering force is already below 0.35 g.
+        let r = run_variant(3, demo::Variant::Loose, |s| {
+            if s.lat_velocity != 0.0 {
+                s.lat_accel = s.lat_accel.signum() * 2.0;
+            }
+        });
+        let list: Vec<_> = r.detected.iter().map(|d| (&d.symptom.behavior, d.symptom.phase, d.symptom.speed)).collect();
+        assert!(found(&r, "oversteer", Some(Phase::Exit), CornerSpeed::Slow), "{list:?}");
+        assert!(!found(&r, "oversteer", Some(Phase::Mid), CornerSpeed::Slow), "{list:?}");
+    }
+
+    #[test]
     fn recordings_replay_the_same() {
         let dir = std::env::temp_dir().join(format!("setup-core-test-{}", std::process::id()));
         let path = dir.join("lap.csv");

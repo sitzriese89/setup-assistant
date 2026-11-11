@@ -296,7 +296,9 @@ counted as two places; and the app called a recurring spot "likely the track, wh
 changed" although it never compares clean runs or changes.
 
 **Decision.**
-- `Sample::default()` marks ride height and lap distance as unknown (< 0), not 0.
+- `Sample::default()` marks ride height and lap distance as unknown (< 0), not 0. (Amended
+  2026-11-11, #50: ride heights between −0.5 m and 0 are hard ground strikes, not unknown;
+  unknown ride height is below −0.5 m, in practice −1.)
 - A clock that goes backwards starts a new epoch: in-progress events are dropped, everything
   learned about the car is kept. Equal timestamps are still skipped as duplicates.
 - Recordings are read column by column (`recording::read_checked`). A row with a missing,

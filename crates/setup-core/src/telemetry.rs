@@ -25,6 +25,8 @@ pub const TYRE_NAMES: [&str; 4] = ["FL", "FR", "RL", "RR"];
 const G: f32 = 9.81;
 /// Steering-wheel degrees from centre to full lock when the game doesn't say.
 const DEFAULT_HALF_RANGE_DEG: f32 = 270.0;
+/// Ride heights (m) below this mean "unknown". No car sits half a metre into the ground.
+pub const RIDE_HEIGHT_UNKNOWN_BELOW: f32 = -0.5;
 
 /// One physics frame, in SI units.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,7 +53,8 @@ pub struct Sample {
     pub tyre_temp: [[f32; 3]; 4],
     /// kPa, <= 0 = unknown.
     pub tyre_pressure: [f32; 4],
-    /// m, < 0 = unknown.
+    /// m, below [`RIDE_HEIGHT_UNKNOWN_BELOW`] = unknown (sources use -1). Small negative
+    /// readings are real: RaceRoom reports them when the car hits the ground hard.
     pub ride_height: [f32; 4],
     pub gear: i32,
     /// Steering wheel rotation from full left to full right in degrees (0 = unknown).
@@ -755,7 +758,8 @@ impl Analyzer {
             self.record("wheelspin", Some(Phase::Exit), CornerSpeed::Both, at);
         }
 
-        let touching = s.speed > 25.0 && s.ride_height.iter().any(|h| (0.0..t.bottoming_height).contains(h));
+        let touching =
+            s.speed > 25.0 && s.ride_height.iter().any(|h| (RIDE_HEIGHT_UNKNOWN_BELOW..t.bottoming_height).contains(h));
         if self.detectors.bottoming.update(touching, dt, 0.05) {
             self.record("bottoming", None, CornerSpeed::Both, at);
         }

@@ -266,6 +266,18 @@ mod telemetry_tests {
     }
 
     #[test]
+    fn hard_strike_below_zero_is_bottoming() {
+        // RaceRoom reports slightly negative ride heights when the car hits the ground hard.
+        let r = run(3, |s| {
+            if s.ride_height[0] < 0.008 {
+                s.ride_height[0] = -0.012;
+                s.ride_height[1] = -0.012;
+            }
+        });
+        assert!(found(&r, "bottoming", None, CornerSpeed::Both));
+    }
+
+    #[test]
     fn bad_recording_rows_are_rejected_not_shifted() {
         let dir = std::env::temp_dir().join(format!("setup-core-csv-{}", std::process::id()));
         let path = dir.join("bad.csv");

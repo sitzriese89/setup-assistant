@@ -3,7 +3,7 @@
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::telemetry::Sample;
 
@@ -17,13 +17,31 @@ pub struct Recorder {
 }
 
 impl Recorder {
+    /// Starts a new recording at `path`. Fails if the file exists: recordings are never overwritten.
     pub fn create(path: &Path) -> io::Result<Self> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let mut out = BufWriter::new(File::create(path)?);
+        let file = File::options().write(true).create_new(true).open(path)?;
+        let mut out = BufWriter::new(file);
         writeln!(out, "{HEADER}")?;
         Ok(Self { out })
+    }
+
+    /// Like [`create`](Self::create), but if `path` is taken, uses `<name>-2.csv`, `<name>-3.csv`, …
+    /// Returns the path actually used.
+    pub fn create_unique(path: &Path) -> io::Result<(Self, PathBuf)> {
+        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let ext = path.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+        for n in 1..1000 {
+            let candidate = if n == 1 { path.to_path_buf() } else { path.with_file_name(format!("{stem}-{n}{ext}")) };
+            match Self::create(&candidate) {
+                Ok(r) => return Ok((r, candidate)),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("no free name for {}", path.display())))
     }
 
     pub fn write(&mut self, s: &Sample) -> io::Result<()> {

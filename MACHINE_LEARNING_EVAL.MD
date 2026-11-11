@@ -1,5 +1,62 @@
 # Machine learning evaluation for Setup Assistant
 
+## Decision record
+
+**Decided:** 2026-11-08; revised 2026-11-11 after the code review in [FINDINGS.MD](FINDINGS.MD).
+**Status:** Not now. Nothing here changes thresholds, dependencies or code. A model-assisted
+decision would need its own ADR.
+
+**Verdict.** Machine learning could help later. It is not in the current plan. The bottleneck
+is trustworthy measurement and labels, not model capacity. If ML is ever used, the best first use
+is a small, locally run model that scores whether a detected episode is a real handling symptom
+or an artefact (crest, kerb, lockup, noise). Physics detects, rules advise, the driver decides.
+
+**Prerequisites (no ML; all are roadmap items):**
+
+1. **Steering geometry from the zero-speed intercept ([#40](https://github.com/sitzriese89/setup-assistant/issues/40)).**
+   The understeer gradient has a speed-dependent offset of up to −55°/g in slow corners. Any
+   model given speed as a feature, and any tuning of `slow_corner_kmh` or per-class thresholds,
+   would learn that offset and seem to beat fixed thresholds. Nothing below starts before #40.
+2. **Understeer in road-wheel degrees (#35).** Measured on the AMG GT3: wheel range 862°, lock
+   22°, ratio 19.6:1. With the 540° fallback that car would read 37% low.
+3. **One episode per phase ([#41](https://github.com/sitzriese89/setup-assistant/issues/41)).**
+   Today one corner can count several events, or none. Labels can't be mapped to events until
+   that's fixed.
+4. **Episode record (#19), `evaluate` with replay parity (#18), recording sidecar
+   ([#43](https://github.com/sitzriese89/setup-assistant/issues/43)).**
+5. **Recordings from three tracks with known-answer A/B/A runs (#22).**
+
+**Experiments, in order:**
+
+- **A (no ML):** does a coarse, physically bounded threshold search (global, then partially
+  pooled per class) remove the measured false alerts without missing persistent understeer? If
+  yes, ship the thresholds and stop.
+- **B:** only if A leaves a specific, documented error class. L2 logistic regression over
+  episode features, judged on held-out sessions and an unseen track, then shadow mode before it
+  may change anything.
+- **Recommendation ranking:** not before M2 and M5 produce verified one-change-at-a-time outcomes.
+
+**Known-answer checks every result must pass:**
+
+- The fitted steering gain extrapolates to lock / wheelbase at zero speed. It's free: no labels,
+  no second setup, no reviewer. It would have caught #40.
+- A deliberately understeering car is reported everywhere, not learned as normal (ADR-7).
+- A/B/A setup changes with a known direction move the detections the right way.
+
+**Stop conditions:** weak label agreement, no robust gain over tuned thresholds, missed
+persistent understeer, failed known-answer checks, gains confined to memorized tracks, or
+upkeep above the value. Keep the deterministic analyzer and the improved dataset.
+
+**Data today:** four local recordings (64 min, Mercedes-AMG GT3, Hockenheim and Red Bull Ring),
+none in the repo. Enough to find #40; far too little for any model.
+
+The rest of this document is the original evaluation, kept as reference for when experiment A
+or B starts. Corrections from 2026-11-11 are marked inline.
+
+---
+
+# Appendix: full evaluation (2026-11-08)
+
 **Reviewed:** 2026-11-08, `main` at `6d509a9` (merge of #34, "Sources report identity and available channels").
 **Status:** Research evaluation only. Nothing here changes the roadmap, ADR-1 to ADR-19, thresholds, dependencies, or code. If model-assisted decisions are ever accepted, that takes a new ADR.
 **Revision:** Second pass. Every code claim was rechecked against the source. Added: the missing episode log (§2.1), steering-unit normalization (§2.2), replay/live parity gaps (§2.3), report-level metrics, the rule of three, an asymmetric error budget, and known-answer setup perturbation tests (§5). The calibration experiment now comes before the model experiment (§8).
@@ -24,7 +81,7 @@ ML must not become a prerequisite for the public alpha. There is no evidence yet
 
 The project is a deterministic expert system with a physics-informed front end:
 
-- `crates/setup-core/src/telemetry.rs` learns steering/yaw sign, geometric steering gain (median of up to 4000 gentle-curve samples, refreshed every 200 frames), understeer gradient in steering-wheel degrees per g (0.2 s smoothing), vertical load baseline, and detects sustained episodes. The understeer gradient is already a strong engineered feature; it is not raw sensor data.
+- `crates/setup-core/src/telemetry.rs` learns steering/yaw sign, geometric steering gain (median of up to 4000 gentle-curve samples, refreshed every 200 frames), understeer gradient in steering-wheel degrees per g (0.2 s smoothing), vertical load baseline, and detects sustained episodes. The understeer gradient is an engineered feature, not raw sensor data. *[2026-11-11: not a strong one yet. The learned geometry depends on speed, so the gradient reads up to −55°/g too low in slow corners (#40).]*
 - `crates/setup-core/src/rules.rs` ranks changes from `rules/gt.json` by weighted votes, rank order, severity, conflicts, and history. `Suggestion.score` is a ranking weight, not a probability.
 - `crates/setup-core/src/track.rs` learns a per-track map in 10 m bins: elevation, lateral g, speed; then corners, crests, compressions, and recurring places.
 - `crates/setup-core/src/live.rs` polls a `Source` about every 10 ms, analyzes, records, and updates the track map under one mutex.
@@ -36,18 +93,18 @@ This is a good ML baseline, but the repository is missing the parts a supervised
 |---|---|---|
 | Detection | Hand-tuned `Thresholds`: 30 deg/g understeer for 0.35 s, 120 km/h slow/fast split, 0.35 g cornering, 0.75 load for crests, 0.008 m bottoming, 0.85 lockup ratio, 1.12 wheelspin ratio, 0.04 front slip under braking | Strong prior. Any learned component must beat a tuned version of this, not an untuned one. |
 | Features | Understeer gradient, slip angle, lateral g, phase, speed class, braking slip, wheel-speed ratios, load, episode state, place | Enough for a small tabular model, but only computed per frame and then discarded (§2.1). |
-| Event counting | `Episode` hysteresis: detector-specific on-time (0.35 s understeer, 0.15 s oversteer/wheelspin, 0.08 s lockup), 0.3 s gap. Counted at **onset**. Understeer/oversteer episodes restart when the corner phase changes. Gaps over 0.5 s reset all episodes | One corner can produce two understeer events (mid, then exit). Detector events are not corner passes; labels need an explicit mapping. |
+| Event counting | `Episode` hysteresis: detector-specific on-time (0.35 s understeer, 0.15 s oversteer/wheelspin, 0.08 s lockup), 0.3 s gap. Counted at **onset**. Understeer/oversteer episodes restart when the corner phase changes. Gaps over 0.5 s reset all episodes | One corner can produce two understeer events (mid, then exit). *[2026-11-11: or more, or none: throttle hovering at the 0.6 cut-off restarts the episode (#41).]* Detector events are not corner passes; labels need an explicit mapping. |
 | Reporting | A problem is shown only after `min_events = 2`; places cluster within 80 m; "one place" at 70% share | A model that removes one event can hide a whole problem. Evaluate what the driver sees, not only events (§5.3). |
 | Severity | `count / driving_minutes`, denominator floored at 1 minute, straights included; <1 slight, <2.5 moderate, else severe | Fixed rule, not calibrated confidence. Not normalized by opportunity (corner time per phase/speed). Do not reuse as a label. |
 | Advice | 22 parameters, 9 behaviours, 18 rules; votes weighted by rule rank and severity | Explainable baseline and candidate generator. Learned ranking is not justified yet. |
 | History | `model.rs` stores applied clicks and fixed symptoms. `nextRun()` in `app/ui/main.js` marks every problem of the finished run fixed at the **start** of the next run, before any driving; `unfixDetected` removes the mark only if the problem is detected again (≥2 events) | "Fixed" means "not seen again yet". It depends on how long the next run was. It is not a verified outcome. |
-| Recordings | 37-column CSV: time, speed, pedals, steering, yaw, lateral acceleration/velocity, wheel speeds, tyre temps/pressures, ride heights, gear, steering range, vertical acceleration, lap distance, elevation | Raw replay works, but context, channel mask, resets, setup state, conditions, and labels are absent. |
-| Recording import | `read_checked` supports 34/36/37 columns and rejects bad rows; older layouts load | Good reliability base. Still no schema version or provenance in the file. |
+| Recordings | 38-column CSV *[2026-11-11: 37 before #37]*: time, speed, pedals, steering, yaw, lateral acceleration/velocity, wheel speeds, tyre temps/pressures, ride heights, gear, steering range, vertical acceleration, lap distance, elevation, steering lock | Raw replay works, but context, channel mask, resets, setup state, conditions, and labels are absent. |
+| Recording import | `read_checked` supports 34/36/37/38 columns and rejects bad rows; older layouts load | Good reliability base. Still no schema version or provenance in the file. |
 | Channel masking | `Channels::mask` turns unavailable channels into their unknown value before analysis and before the track map | Necessary for honest missing-data behavior. Recordings store the unmasked sample and not the mask. |
 | Track map | 10 m running means; corners above 0.4 g; features above 3 m/s² curvature effect; last 12 run summaries | Useful place features. Summaries omit clean runs and do not encode what changed. |
 | Tyres | Temperatures average only when all 12 are present; pressures average only when all 4 pressures **and** all temperatures are present; fixed spread thresholds after 30 s | One missing sensor hides every tyre reading. No uncertainty. |
 | Tests | Synthetic demo laps assert exact detections; `replay` example prints one recording and only overrides the understeer threshold | Good software regressions, not independent real-world validation. |
-| Corpus | No `fixtures/` directory, no real recordings, no trained artifacts, no model dependencies | Achievable accuracy is unknown. |
+| Corpus | No `fixtures/` directory, no real recordings, no trained artifacts, no model dependencies. *[2026-11-11: four local recordings (64 min, one car, two tracks) exist outside the repo.]* | Achievable accuracy is unknown. |
 
 ### 2.1 There is no episode to score yet
 
@@ -64,6 +121,8 @@ The gradient is `extra_steer × half_range / lateral_g`, in **steering-wheel** d
 
 Normalize before calibrating or learning: express the gradient in road-wheel degrees per g where the ratio is known (RaceRoom's `steer_lock_degrees`, if a real-car check confirms it is road-wheel lock), and treat episodes measured with an assumed range as lower-quality evidence. Otherwise any calibration or model will learn per-car unit corrections and call them handling.
 
+*[2026-11-11: no longer only arithmetic. Measured on the AMG GT3: wheel range 862°, lock 22°, ratio 19.6:1; with the 540° fallback that car would read 37% low. The steering-gain fit in #40 implies a wheelbase of 2.60–2.61 m (real car about 2.65 m), which supports reading `steer_lock_degrees` as road-wheel lock. The geometry bias in #40 is larger than this unit problem and flips the sign of the reading in slow corners.]*
+
 ### 2.3 Replay is not the analysis the driver saw
 
 The `replay` example creates an `Analyzer` with default channels and no track length, and never builds a track map. In live analysis:
@@ -77,9 +136,9 @@ An evaluator built on today's replay measures a different system. M3.2 must repl
 
 ### Data the game already exposes but the core drops
 
-The RaceRoom layout (`crates/r3e-telemetry/src/layout.rs`) includes signals that `Sample` does not carry: per-tyre `tire_load`, `tire_grip`, `tire_wear`, `tire_flatspot`, `tire_dirt`, `tire_type`, `brake_temp`, `brake_pressure`, `suspension_deflection`, `suspension_velocity`, `fuel_left`, `fuel_capacity`, `fuel_per_lap`, `traction_control_setting`, `traction_control_percent`, `abs_setting`, `brake_bias`, `steer_lock_degrees`, `local_g_force`, and `steering_force`.
+The RaceRoom layout (`crates/r3e-telemetry/src/layout.rs`) includes signals that `Sample` does not carry: per-tyre `tire_load`, `tire_grip`, `tire_wear`, `tire_flatspot`, `tire_dirt`, `tire_type`, `brake_temp`, `brake_pressure`, `suspension_deflection`, `suspension_velocity`, `fuel_left`, `fuel_capacity`, `fuel_per_lap`, `traction_control_setting`, `traction_control_percent`, `abs_setting`, `brake_bias`, `local_g_force`, and `steering_force`. *[2026-11-11: `steer_lock_degrees` was on this list; since #37 it is in `Sample`, the recording and `replay`.]*
 
-These are valuable candidates for features, context, and weak labels. `steer_lock_degrees` matters most for §2.2. Fuel and tyre wear matter as confounders in run comparison. They are not free: the core is game-agnostic (ADR-3), so each must be exposed through a capability-gated channel, validated on real cars, and handled as missing when a second adapter cannot provide it. Do not train on a RaceRoom-only field and pretend it generalizes to LMU.
+These are valuable candidates for features, context, and weak labels. Fuel and tyre wear matter as confounders in run comparison. They are not free: the core is game-agnostic (ADR-3), so each must be exposed through a capability-gated channel, validated on real cars, and handled as missing when a second adapter cannot provide it. Do not train on a RaceRoom-only field and pretend it generalizes to LMU.
 
 ### The two data traps
 
@@ -90,7 +149,7 @@ These are valuable candidates for features, context, and weak labels. `steer_loc
 
 | Rank | Opportunity | Value | Readiness | Smallest worthwhile approach | Verdict |
 |---|---|---|---|---|---|
-| 0 | Episode log, unit normalization, replay parity | Enables everything below | Code exists to extend | Plain Rust; no model | Prerequisite. Do first, with M3. |
+| 0 | Geometry fit (#40, added 2026-11-11), episode log, unit normalization, replay parity | Enables everything below | Code exists to extend | Plain Rust; no model | Prerequisite. Do first, with M3. |
 | 1 | Class-aware threshold calibration | High | Needs M3 corpus and §2.2 | Offline search over a small, physically bounded parameter set; partially pooled per class | Experiment A. It may remove the need for a model. |
 | 2 | Episode validity / false-positive reduction | High | Needs episode log and independent labels | L2 logistic regression over existing derived features | Experiment B, only if A leaves a gap. |
 | 3 | Run comparison and improvement estimate | High product value | Needs M2, M5.3 | Matched per-corner statistics first; model only for residual variation | Statistics first. ML only if it beats them. |
@@ -165,7 +224,7 @@ If this is ever attempted, keep capability filtering, parameter limits, conflict
 
 ### 4.1 Add a sidecar, not a new database
 
-The recording CSV should stay simple. Put context beside it in a versioned JSON sidecar (or a session-level manifest):
+The recording CSV should stay simple. Put context beside it in a versioned JSON sidecar (or a session-level manifest). *[2026-11-11: needed now for ordinary replay, not only for ML: roadmap M1.8, #43.]*
 
 | Field | Minimum content | Why |
 |---|---|---|
@@ -220,6 +279,8 @@ For the same held-out recordings:
 
 If tuned thresholds match the model, ship the thresholds. If the model only compensates for wrong sensor semantics, wrong units, or a missing capability check, fix the data interpretation instead.
 
+*[2026-11-11: a concrete case exists. Any model with speed as a feature would learn the geometry offset (#40) and beat fixed thresholds; so would tuning `slow_corner_kmh` or per-class thresholds in experiment A. Neither result would mean anything. Experiment A must not start before #40.]*
+
 ### 5.3 Metrics
 
 Measure at three levels, because the driver only sees the last two:
@@ -249,6 +310,7 @@ Human labels are expensive and biased toward the detector. Physics provides labe
 - The physics answer is known: mid-corner understeer gradient must rise in B, and fall back in the second A. The detector must report more understeer in B, at more places, not at one crest.
 - Repeat with a known-oversteer change and a brake-bias change (braking understeer/lockups).
 - For ADR-7: build a deliberately understeering car and check it is reported everywhere, not learned as normal.
+- *[2026-11-11]* The free one: steering gain against speed must extrapolate to lock / wheelbase at zero speed. No labels, no second setup, no reviewer; it would have caught #40.
 
 These runs test direction and sensitivity, not exact counts. They are independent of the analyzer, need no reviewer, and are the cheapest data for the later run-comparison and ranking work. Add them to the M3.6 collection.
 
@@ -301,7 +363,7 @@ An accepted model-assisted decision should get an ADR covering its role, fallbac
 | M5.4-M5.5 tyres (#30-31) | Confirms sensor semantics and targets | Consider forecasting only afterward. |
 | M6.1 LMU (#32) | Adds a second domain | Evaluate separately; no mixed-game training without a domain-shift study. |
 
-Steering-unit normalization (§2.2) is now roadmap item M3.7 (#35).
+Steering-unit normalization (§2.2) is now roadmap item M3.7 (#35). *[2026-11-11: also the geometry fit M3.8 (#40), one episode per phase M3.9 (#41) and the recording sidecar M1.8 (#43).]*
 
 If adopted, each experiment should be its own issue and PR, following the existing one-issue-per-PR process. ML should not become a parallel platform project.
 
@@ -362,4 +424,4 @@ Neither win is established by this source review. Both must beat a tuned, explai
 
 ## Review limits
 
-This evaluation is based on source inspection of `main`: core analysis, rules, model, recording, live session, track map, demo, replay example, RaceRoom adapter and layout, frontend run handling, tests, roadmap, and ADRs. It did not run the app, benchmark inference, measure detector accuracy, or inspect any real recording. Threshold values and RaceRoom channel semantics (including whether `steer_lock_degrees` is road-wheel lock) remain unvalidated here. The steering-ratio and wheel-range percentages in §2.2 are arithmetic from the formula, not measurements. No model was trained, and no code, threshold, dependency, ADR, or roadmap item was changed.
+This evaluation is based on source inspection of `main`: core analysis, rules, model, recording, live session, track map, demo, replay example, RaceRoom adapter and layout, frontend run handling, tests, roadmap, and ADRs. It did not run the app, benchmark inference, measure detector accuracy, or inspect any real recording. Threshold values and RaceRoom channel semantics (including whether `steer_lock_degrees` is road-wheel lock) remain unvalidated here. The steering-ratio and wheel-range percentages in §2.2 are arithmetic from the formula, not measurements. No model was trained, and no code, threshold, dependency, ADR, or roadmap item was changed. *[2026-11-11: the follow-up review in FINDINGS.MD did look at real recordings; see the decision record at the top.]*

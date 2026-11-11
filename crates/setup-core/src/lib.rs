@@ -267,10 +267,11 @@ mod telemetry_tests {
 
     #[test]
     fn kerb_strikes_are_not_bottoming() {
-        // The demo lap has one wheel low over a kerb on T2's exit (#42).
+        // The demo lap has one wheel low over a kerb on T2's exit (#42), down to −12 mm.
+        let low = |h: &f32| (telemetry::RIDE_HEIGHT_UNKNOWN_BELOW..0.008).contains(h);
         let one_wheel_low = demo::lap(0.0)
             .iter()
-            .filter(|s| s.speed > 25.0 && s.ride_height.iter().filter(|h| (0.0..0.008).contains(*h)).count() == 1)
+            .filter(|s| s.speed > 25.0 && s.ride_height.iter().filter(|h| low(h)).count() == 1)
             .count();
         assert!(one_wheel_low >= 10, "only {one_wheel_low} kerb samples");
         // Without the compression only the kerb is left: no bottoming at all.
@@ -290,6 +291,20 @@ mod telemetry_tests {
         assert_eq!(b.count, 3, "{:?}", b.places);
         assert_eq!(b.places.len(), 1, "{:?}", b.places);
         assert!(b.places[0].label.contains("compression"), "{}", b.places[0].label);
+    }
+
+    #[test]
+    fn hard_strike_below_zero_is_bottoming() {
+        // RaceRoom reports slightly negative ride heights when the car hits the ground hard.
+        // FR is only low in the compression (the kerb is under FL).
+        let r = run(3, |s| {
+            if s.ride_height[1] < 0.008 {
+                s.ride_height[0] = -0.012;
+                s.ride_height[1] = -0.012;
+            }
+        });
+        let b = r.detected.iter().find(|d| d.symptom.behavior == "bottoming");
+        assert_eq!(b.map(|b| b.count), Some(3), "once per lap expected");
     }
 
     #[test]

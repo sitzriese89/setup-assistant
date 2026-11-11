@@ -53,7 +53,8 @@ rejected, so typos fail the `builtin_rules_are_valid` test.
 - **Oversteer:** countersteering while the body slides (slip > 2.5°), or slip > 6° on its own.
 - **Lockups / wheelspin:** wheel surface speed vs. car speed under braking / throttle.
 - **Bottoming:** ride height under 8 mm on both wheels of an axle at once, at speed (not
-  verified against real scraping yet). One wheel low, or one side of the car, is a kerb
+  verified against real scraping yet). This includes the small negative readings RaceRoom
+  gives on hard strikes; only below −0.5 m means unknown. One wheel low, or one side of the car, is a kerb
   strike and isn't reported: kerbs aren't a setup problem. In real recordings every low
   reading so far was a kerb, with vertical jolts from about 3 to 42 m/s², so the jolt alone
   can't tell kerbs apart (ADR-20). With a track map, bottoming that mostly happens in

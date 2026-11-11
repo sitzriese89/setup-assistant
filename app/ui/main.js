@@ -170,7 +170,7 @@ function renderProblems() {
     li.querySelector("button").addEventListener("click", () => {
       state.symptoms.splice(i, 1);
       renderProblems();
-      refresh();
+      refresh({ pruneTried: true });
     });
     list.appendChild(li);
   });
@@ -341,12 +341,25 @@ async function newSession() {
 
 // ---------- results ----------
 
-async function refresh() {
+async function refresh({ pruneTried = false } = {}) {
   // Answers can come back out of order: only the latest request may render.
   const seq = (refresh.seq = (refresh.seq || 0) + 1);
   const symptoms = state.symptoms.map((s) => s.symptom);
   const suggestions = symptoms.length ? await invoke("suggest", { car: state.car, symptoms, history: historyForCore() }) : [];
-  if (seq === refresh.seq) renderSuggestions(suggestions);
+  if (seq !== refresh.seq) return;
+  if (pruneTried) dropHiddenTried(suggestions);
+  renderSuggestions(suggestions);
+}
+
+/// After a problem is removed, a ticked change whose card went with it can't be seen or
+/// unticked any more: it must not count for Next run or go into history.
+function dropHiddenTried(suggestions) {
+  const shown = new Set(suggestions.map((s) => `${s.param}:${s.direction}`));
+  const hidden = [...state.tried.keys()].filter((key) => !shown.has(key));
+  if (!hidden.length) return;
+  hidden.forEach((key) => state.tried.delete(key));
+  renderHistory();
+  save();
 }
 
 function renderSuggestions(list) {

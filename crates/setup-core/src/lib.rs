@@ -398,10 +398,11 @@ mod telemetry_tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    /// Panics on its second poll, then plays demo laps.
+    /// Panics on its second poll, then plays a demo lap, 100 samples per poll.
     struct PanicsOnce {
         polls: u32,
-        laps: EndlessLaps,
+        samples: Vec<Sample>,
+        next: usize,
     }
 
     impl live::Source for PanicsOnce {
@@ -410,13 +411,16 @@ mod telemetry_tests {
             if self.polls == 2 {
                 panic!("test: source failed once");
             }
-            self.laps.poll()
+            let end = (self.next + 100).min(self.samples.len());
+            let chunk = self.samples[self.next..end].to_vec();
+            self.next = end;
+            live::Poll::Samples(chunk)
         }
     }
 
     #[test]
     fn telemetry_survives_a_panic() {
-        let source = PanicsOnce { polls: 0, laps: EndlessLaps { buffer: Vec::new(), next: 0 } };
+        let source = PanicsOnce { polls: 0, samples: demo::lap(0.0), next: 0 };
         let session = live::LiveSession::start(Box::new(source), None);
         let rules = RuleBook::builtin();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
@@ -426,24 +430,6 @@ mod telemetry_tests {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         session.reset();
-    }
-
-    /// Plays demo laps forever, 100 samples per poll.
-    struct EndlessLaps {
-        buffer: Vec<Sample>,
-        next: usize,
-    }
-
-    impl live::Source for EndlessLaps {
-        fn poll(&mut self) -> live::Poll {
-            if self.next + 100 > self.buffer.len() {
-                let t0 = self.buffer.last().map_or(0.0, |s| s.time + 0.01);
-                self.buffer = demo::lap(t0);
-                self.next = 0;
-            }
-            self.next += 100;
-            live::Poll::Samples(self.buffer[self.next - 100..self.next].to_vec())
-        }
     }
 
     #[test]

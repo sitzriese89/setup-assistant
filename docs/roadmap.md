@@ -34,7 +34,7 @@ line, Next run / suggestion guards, softer recurrence wording.
 | Source line is empty or stale while not driving | [#47][47] | Open |
 | Removed problems leave their ticked changes in Next run | [#48][48] | Open |
 | Power oversteer after the corner is filed as mid-corner | [#49][49] | Open |
-| Negative ride height on hard strikes isn't counted as bottoming (after M3.10) | [#50][50] | Open |
+| Negative ride height on hard strikes isn't counted as bottoming (after M3.10) | [#50][50] | Done (#55) |
 | Hardening: saved track maps, telemetry-thread panics, vertical median | [#51][51] | Open |
 
 ## Decisions behind this plan

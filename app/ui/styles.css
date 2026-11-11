@@ -525,6 +525,8 @@ h3.sub { font-size: 14px; margin: 18px 0 10px; display: flex; align-items: basel
   color: #ffd2bd;
   white-space: nowrap;
 }
+.run-bar .new-session { white-space: nowrap; }
+.run-bar .new-session.confirm { color: var(--warn); border: 1px solid currentColor; }
 .primary.run-btn { width: auto; padding: 8px 14px; font-size: 13px; white-space: nowrap; box-shadow: none; }
 
 .history { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 18px; }

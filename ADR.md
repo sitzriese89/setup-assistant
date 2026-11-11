@@ -338,3 +338,23 @@ come later with the class profiles (roadmap M5.1).
 
 **Consequences.** Adapters must declare their channels honestly; per-frame values RaceRoom
 marks as -1 turn the channel off. Recordings keep the raw values.
+
+## ADR-20: Bottoming needs both wheels of an axle; kerbs aren't reported
+
+**Context.** Kerb strikes were counted as bottoming (#42): Red Bull Ring 2026-11-10 run 3
+flagged it twice at 3640 m from the front-left wheel at −12 mm. Bottoming advice (ride height,
+springs) is wrong for a kerb. In the four local recordings (AMG GT3, Hockenheim and Red Bull
+Ring) every reading below 8 mm is on one wheel or one side of the car; no sample has both wheels
+of an axle low at once. Their vertical jolts range from about 3 to 42 m/s², while road noise reaches
+4 m/s² at the 99th percentile and 8 m/s² at the 99.9th, so a jolt threshold can't separate
+kerbs from other low readings.
+
+**Decision.** Bottoming counts only when both wheels of the front or the rear axle are below
+the threshold at the same time (still at least 0.05 s, above 25 m/s). One wheel low, or one
+side of the car, is a kerb strike: not recorded and not reported, since kerbs aren't a setup
+problem by default. No new threshold; the 8 mm threshold is unchanged.
+
+**Consequences.** All low readings in the recordings so far stop counting, including the hard
+negative ones #50 starts counting. A splitter scraping on one corner only (heavy roll) is no
+longer reported; if real recordings show that, it needs its own rule. Whether real axle-wide
+scraping is caught is still to be checked on track (sim-testing T5).

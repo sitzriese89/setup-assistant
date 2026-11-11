@@ -3,7 +3,9 @@
 //!
 //! - `Mixed`: understeer mid-corner in the first hairpin; a front lockup,
 //!   wheelspin and power oversteer at corner 4. FL runs too much camber,
-//!   RL too much pressure.
+//!   RL too much pressure. Bottoms out on the front axle in the compression
+//!   before corner 4, and hits a kerb with the front-left wheel on corner 2's
+//!   exit (not bottoming).
 //! - `Loose`: oversteer on exit of both slow corners and rear instability
 //!   under braking. What a driver might start with.
 //! - `Pushing`: the same car after the oversteer is fixed: understeers through
@@ -62,6 +64,9 @@ struct Corner {
     crest_mid: bool,
     /// Scrapes the ground in the compression in this corner's braking zone.
     bottoms_in_compression: bool,
+    /// Front-left wheel hits a kerb on the exit: a short drop in its ride height
+    /// (down to −12 mm, like RaceRoom reports) with a vertical jolt.
+    kerb_exit: bool,
 }
 
 fn corners(variant: Variant) -> Vec<Corner> {
@@ -77,6 +82,7 @@ fn corners(variant: Variant) -> Vec<Corner> {
         Variant::Mixed => {
             c[0].understeer_mid = 45.0;
             c[0].braking_understeer = true;
+            c[1].kerb_exit = true;
             c[2].crest_mid = true;
             c[3].bottoms_in_compression = true;
             c[3].oversteer_exit = true;
@@ -204,6 +210,11 @@ pub fn lap_variant(t0: f64, variant: Variant) -> Vec<Sample> {
                 s.yaw_rate *= 1.5;
                 s.steer = -s.steer * 0.3;
                 s.lat_velocity = dir * v * 7f32.to_radians().tan();
+            }
+            if c.kerb_exit && (0.5..0.62).contains(&u) {
+                // Like Red Bull Ring 2026-11-10 run 3 at 3640 m: one wheel, 0.18 s, 15 m/s² jolt.
+                s.ride_height[0] = if (0.54..0.58).contains(&u) { -0.012 } else { 0.004 };
+                s.vert_accel += 15.0;
             }
             emit(&mut t, s);
         }

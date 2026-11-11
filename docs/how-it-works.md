@@ -52,9 +52,13 @@ rejected, so typos fail the `builtin_rules_are_valid` test.
   line, so events just before and just after it count as one place.
 - **Oversteer:** countersteering while the body slides (slip > 2.5°), or slip > 6° on its own.
 - **Lockups / wheelspin:** wheel surface speed vs. car speed under braking / throttle.
-- **Bottoming:** ride height under 8 mm at speed (not verified against real scraping yet).
-  With a track map, bottoming that mostly happens in compressions becomes its own problem
-  ("Bottoming in compressions") with compression-specific advice.
+- **Bottoming:** ride height under 8 mm on both wheels of an axle at once, at speed (not
+  verified against real scraping yet). One wheel low, or one side of the car, is a kerb
+  strike and isn't reported: kerbs aren't a setup problem. In real recordings every low
+  reading so far was a kerb, with vertical jolts from about 3 to 42 m/s², so the jolt alone
+  can't tell kerbs apart (ADR-20). With a track map, bottoming that mostly happens in
+  compressions becomes its own problem ("Bottoming in compressions") with
+  compression-specific advice.
 - Each problem counts once per episode and is reported after it happened twice. Severity
   comes from how often it happens per minute of driving.
 - The signs of steering and yaw don't matter; the analyzer learns how they relate.

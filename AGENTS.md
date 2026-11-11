@@ -26,6 +26,12 @@ cargo test --workspace
 New detectors need a demo case in `crates/setup-core/src/demo.rs` and a test that asserts
 exact detections. New Tauri commands need a branch in `crates/setup-core/examples/ui_preview.rs`.
 
+## Driving tests
+
+What still needs testing in RaceRoom, and how past sessions went, is in
+[docs/sim-testing.md](docs/sim-testing.md). Use the `sim-test` skill to plan a session and to
+log its results there.
+
 ## Checking UI changes
 
 - Browser: `cargo run -p setup-core --example ui_preview`, open http://127.0.0.1:1420, then

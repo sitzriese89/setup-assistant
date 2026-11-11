@@ -57,8 +57,9 @@ pub struct Sample {
     /// Steering wheel rotation from full left to full right in degrees (0 = unknown).
     #[serde(default)]
     pub steer_range_deg: f32,
-    /// m/s², vertical. Any sign convention, with or without gravity: the analyzer
-    /// learns the level on flat straights. Used to spot crests (car goes light).
+    /// m/s², vertical. Used to spot crests (car goes light). The analyzer learns the level on
+    /// flat straights. With gravity included any sign convention works (the level's sign tells
+    /// which way is up); without gravity the level reads about 0 and + must mean more load.
     #[serde(default)]
     pub vert_accel: f32,
     /// Metres from the start line (< 0 = unknown). Used to tell where problems happen.
@@ -426,6 +427,7 @@ pub struct Analyzer {
     gain_cursor: usize,
     geometry_gain: Option<f32>,
     pushes_since_geometry: u32,
+    pushes_since_vert_level: u32,
     /// Smoothed understeer gradient (wheel degrees per g).
     understeer_smooth: Option<f32>,
     balance: Option<f32>,
@@ -467,6 +469,7 @@ impl Analyzer {
             gain_cursor: 0,
             geometry_gain: None,
             pushes_since_geometry: 0,
+            pushes_since_vert_level: 0,
             understeer_smooth: None,
             balance: None,
             phase_balance: HashMap::new(),
@@ -637,13 +640,16 @@ impl Analyzer {
                 self.vert_cursor = (self.vert_cursor + 1) % GAIN_CAPACITY;
             }
         }
-        if self.verts.len() >= 100 && (self.vert_level.is_none() || self.pushes_since_geometry >= 199) {
+        self.pushes_since_vert_level += 1;
+        if self.verts.len() >= 100 && (self.vert_level.is_none() || self.pushes_since_vert_level >= 200) {
             let mut sorted = self.verts.clone();
             sorted.sort_by(f32::total_cmp);
             let level = sorted[sorted.len() / 2];
             // With gravity included the level reading is about 1 g; its sign tells which way is up.
+            // Without gravity (RaceRoom reads about 0) the sign can't be learned: + = more load.
             let sign = if level.abs() > 5.0 { level.signum() } else { 1.0 };
             self.vert_level = Some((level, sign));
+            self.pushes_since_vert_level = 0;
         }
         let load = self.vert_level.map(|(level, sign)| 1.0 + sign * (s.vert_accel - level) / G);
         if matches!(load, Some(l) if l < t.light_load) {

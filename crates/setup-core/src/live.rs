@@ -5,7 +5,7 @@
 //! own recording file; the previous run's balance is kept for comparison.
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -202,7 +202,17 @@ pub struct LiveSession {
     inner: Arc<Mutex<Inner>>,
 }
 
+/// Locks the session state. A panic while it was held (caught in the telemetry thread)
+/// doesn't make every later command panic too.
+fn lock(inner: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
+    inner.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 impl LiveSession {
+    fn lock(&self) -> MutexGuard<'_, Inner> {
+        lock(&self.inner)
+    }
+
     /// Starts polling `source` about 100 times per second. Real driving is
     /// recorded to `record_dir` when given.
     pub fn start(source: Box<dyn Source>, record_dir: Option<PathBuf>) -> Self {
@@ -235,8 +245,8 @@ impl LiveSession {
         std::thread::Builder::new()
             .name("telemetry".into())
             .spawn(move || loop {
-                {
-                    let mut st = shared.lock().unwrap();
+                let step = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let mut st = lock(&shared);
                     let poll = match st.demo.as_mut() {
                         Some(demo) => Poll::Samples(demo.due()),
                         None => source.poll(),
@@ -289,6 +299,11 @@ impl LiveSession {
                         }
                         st.last_flush = Instant::now();
                     }
+                }));
+                if step.is_err() {
+                    // A bug in analysis must not stop telemetry for the rest of the session
+                    // (release builds have no console to show it): start the run's analysis fresh.
+                    lock(&shared).analyzer.reset();
                 }
                 std::thread::sleep(Duration::from_millis(10));
             })
@@ -297,7 +312,7 @@ impl LiveSession {
     }
 
     pub fn status(&self, rules: &RuleBook) -> LiveStatus {
-        let st = self.inner.lock().unwrap();
+        let st = self.lock();
         let mut report = st.analyzer.report();
         for d in &mut report.detected {
             d.label = rules.symptom_label(&d.symptom);
@@ -328,20 +343,20 @@ impl LiveSession {
 
     /// Clears what was detected in this run (keeps the run number).
     pub fn reset(&self) {
-        let mut st = self.inner.lock().unwrap();
+        let mut st = self.lock();
         st.analyzer.reset();
         st.last_sample = None;
     }
 
     /// The setup was changed: start a fresh analysis and recording, remember this run's balance.
     pub fn next_run(&self) {
-        let run = self.inner.lock().unwrap().run + 1;
+        let run = self.lock().run + 1;
         self.start_run(run);
     }
 
     /// Like [`next_run`](Self::next_run) with an explicit run number (the UI keeps the count).
     pub fn start_run(&self, run: u32) {
-        let mut st = self.inner.lock().unwrap();
+        let mut st = self.lock();
         let report = st.analyzer.report();
         if !report.balance_by_phase.is_empty() {
             st.previous_balance = report.balance_by_phase.clone();
@@ -362,7 +377,7 @@ impl LiveSession {
 
     /// Sets the run number without resetting anything (e.g. after an app restart).
     pub fn set_run(&self, run: u32) {
-        let mut st = self.inner.lock().unwrap();
+        let mut st = self.lock();
         if st.run != run.max(1) {
             st.run = run.max(1);
             st.close_recording();
@@ -371,7 +386,7 @@ impl LiveSession {
 
     /// Names a corner on the current track map (empty name removes it).
     pub fn rename_corner(&self, number: u32, name: String) {
-        let mut st = self.inner.lock().unwrap();
+        let mut st = self.lock();
         if let Some(map) = st.track.as_mut() {
             if name.trim().is_empty() {
                 map.names.remove(&number);
@@ -384,7 +399,7 @@ impl LiveSession {
 
     /// Back to run 1 with nothing remembered.
     pub fn new_session(&self) {
-        let mut st = self.inner.lock().unwrap();
+        let mut st = self.lock();
         st.run = 1;
         st.previous_balance.clear();
         st.analyzer.reset();
@@ -398,7 +413,7 @@ impl LiveSession {
 
     /// Demo mode plays synthetic laps (at 2x speed) instead of the game.
     pub fn set_demo(&self, on: bool) {
-        let mut st = self.inner.lock().unwrap();
+        let mut st = self.lock();
         let variant = demo_variant(st.run);
         st.close_recording();
         st.demo = on.then(|| DemoSource::new(2.0, variant));

@@ -120,7 +120,9 @@ from straights (with or without gravity, either sign).
 
 **Consequences.** Adapters stay thin and other games work without sign fixes. A test drives the
 demo lap with flipped signs and expects the same detections. The cost is a short calibration at
-the start of each run (see ADR-8).
+the start of each run (see ADR-8). (Amended 2026-11-11, #51: "either sign" holds only with
+gravity included. Without it the level reads about 0, the sign can't be learned, and + = more
+load is assumed; RaceRoom reads about 0.)
 
 ## ADR-7: Balance relative to the car's own medium-speed cornering
 

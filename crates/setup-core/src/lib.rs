@@ -266,6 +266,33 @@ mod telemetry_tests {
     }
 
     #[test]
+    fn kerb_strikes_are_not_bottoming() {
+        // The demo lap has one wheel low over a kerb on T2's exit (#42).
+        let one_wheel_low = demo::lap(0.0)
+            .iter()
+            .filter(|s| s.speed > 25.0 && s.ride_height.iter().filter(|h| (0.0..0.008).contains(*h)).count() == 1)
+            .count();
+        assert!(one_wheel_low >= 10, "only {one_wheel_low} kerb samples");
+        // Without the compression only the kerb is left: no bottoming at all.
+        let r = run(3, |s| {
+            if s.ride_height[1] < 0.008 {
+                s.ride_height[0] = 0.05;
+                s.ride_height[1] = 0.05;
+            }
+        });
+        let list: Vec<_> = r.detected.iter().map(|d| (&d.symptom.behavior, d.count)).collect();
+        assert!(!found(&r, "bottoming", None, CornerSpeed::Both), "{list:?}");
+        assert_eq!(r.detected.len(), 5, "{list:?}");
+        // With it, bottoming is counted once per lap, in the compression only.
+        let mut r = run(3, |_| {});
+        demo_map(2).annotate(&mut r);
+        let b = r.detected.iter().find(|d| d.symptom.behavior.starts_with("bottoming")).unwrap();
+        assert_eq!(b.count, 3, "{:?}", b.places);
+        assert_eq!(b.places.len(), 1, "{:?}", b.places);
+        assert!(b.places[0].label.contains("compression"), "{}", b.places[0].label);
+    }
+
+    #[test]
     fn bad_recording_rows_are_rejected_not_shifted() {
         let dir = std::env::temp_dir().join(format!("setup-core-csv-{}", std::process::id()));
         let path = dir.join("bad.csv");

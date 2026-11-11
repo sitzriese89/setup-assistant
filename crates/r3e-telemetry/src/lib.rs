@@ -156,6 +156,14 @@ impl Source for R3eSource {
             self.identity = None;
             return Poll::NotRunning;
         };
+        self.poll_frame(&d)
+    }
+}
+
+impl R3eSource {
+    /// What one frame of shared memory means. The identity is kept up to date in the garage
+    /// and menus too, so the driver sees the right car and track before driving.
+    fn poll_frame(&mut self, d: &Shared) -> Poll {
         if d.version_major != layout::VERSION_MAJOR {
             self.identity = None;
             return Poll::NotRunning;
@@ -167,16 +175,23 @@ impl Source for R3eSource {
             && d.game_in_replay == 0
             && d.game_player_in_garage == 0
             && d.control_type == 0;
+        let mut id = identity(d);
         if !driving {
+            // Channels are only meaningful while driving (lap distance is -1 in the garage):
+            // keep the ones seen last, so "not available" doesn't flicker in the pits.
+            if let Some(prev) = &self.identity {
+                id.channels = prev.channels;
+            }
+            self.identity = Some(id);
             return Poll::Idle;
         }
-        self.identity = Some(identity(&d));
+        self.identity = Some(id);
         let tick = d.player.game_simulation_ticks;
         if tick == self.last_tick {
             return Poll::Samples(Vec::new());
         }
         self.last_tick = tick;
-        Poll::Samples(vec![to_sample(&d)])
+        Poll::Samples(vec![to_sample(d)])
     }
 }
 
@@ -343,5 +358,38 @@ mod tests {
         assert_eq!(super::to_sample(&d).steering_ratio(), None);
         assert!(id.channels.tyre_temp && id.channels.ride_height);
         assert_eq!(id.session, SessionKind::Unknown);
+    }
+
+    #[test]
+    fn identity_is_known_in_the_garage() {
+        use setup_core::live::{Poll, Source};
+        let mut d: Shared = unsafe { std::mem::zeroed() };
+        d.version_major = VERSION_MAJOR;
+        d.track_id = 1693;
+        d.layout_id = 1694;
+        d.layout_length = 6213.0;
+        d.vehicle_info.model_id = 5234;
+        d.vehicle_info.class_id = 1703;
+        d.lap_distance = -1.0; // RaceRoom has no lap position in the garage
+        d.game_player_in_garage = 1;
+        let mut source = super::R3eSource::new();
+        assert!(matches!(source.poll_frame(&d), Poll::Idle));
+        let id = source.identity().expect("identity before the first drive");
+        assert_eq!(id.car.unwrap().id, "r3e-car-5234");
+        assert_eq!(id.track.unwrap().id, "r3e-1693-1694");
+
+        // Drive with every channel, then go back to the garage in another car.
+        d.game_player_in_garage = 0;
+        d.lap_distance = 120.0;
+        d.player.game_simulation_ticks = 1;
+        assert!(matches!(source.poll_frame(&d), Poll::Samples(_)));
+        assert!(source.identity().unwrap().channels.lap_distance);
+        d.game_player_in_garage = 1;
+        d.lap_distance = -1.0;
+        d.vehicle_info.model_id = 7000;
+        assert!(matches!(source.poll_frame(&d), Poll::Idle));
+        let id = source.identity().unwrap();
+        assert_eq!(id.car.unwrap().id, "r3e-car-7000", "car change seen in the garage");
+        assert!(id.channels.lap_distance, "channels from driving are kept in the garage");
     }
 }

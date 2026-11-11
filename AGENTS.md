@@ -2,8 +2,11 @@
 
 Setup Assistant: a Rust + Tauri 2 desktop app that suggests sim racing setup changes from
 described problems and live telemetry (RaceRoom first). Read [ADR.md](ADR.md) before changing
-direction; [CONTRIBUTING.md](CONTRIBUTING.md) has the full developer guide. The plan is in
-[docs/roadmap.md](docs/roadmap.md): one GitHub issue per item, worked one issue per PR.
+direction; [CONTRIBUTING.md](CONTRIBUTING.md) has the full developer guide.
+
+Scope, order and status are in [docs/roadmap.md](docs/roadmap.md): one GitHub issue per item,
+worked one issue per PR. Before picking or starting work, read its Status section and the
+**Now** marker, and run `gh pr list` for what is already in review.
 
 ## Ground rules
 
@@ -25,6 +28,8 @@ cargo test --workspace
 
 New detectors need a demo case in `crates/setup-core/src/demo.rs` and a test that asserts
 exact detections. New Tauri commands need a branch in `crates/setup-core/examples/ui_preview.rs`.
+A PR that finishes a roadmap item or listed bug sets its Status row in `docs/roadmap.md`
+(rules in its Status section).
 
 ## Driving tests
 

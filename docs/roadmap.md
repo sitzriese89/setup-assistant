@@ -9,14 +9,33 @@ reordered the plan: see "Order of work" below.
 alpha (installer for other RaceRoom drivers) follows once history and fix checking are
 trustworthy (see the alpha gate below).
 
-**Already done** ([PR #2](https://github.com/sitzriese89/setup-assistant/pull/2)): game clock
-resets, unknown ride height, strict CSV import, tied votes, places across the start line,
-Next run / suggestion guards, softer recurrence wording.
+## Status
 
-**Bugs from the 2026-11-11 review** (not roadmap items, one PR each): ABS pulsing (#45),
-recording overwritten by the demo toggle (#46), source line while not driving (#47), ticked
-changes of removed problems (#48), exit slides filed as mid-corner (#49), negative ride height
-(#50, lands with M3.10), hardening (#51).
+The **Status** column of every table below says what is on `main`: **Done (#PR)**, **Partly
+done (#PR: what)**, **In progress** (driver tasks only) or **Open**. Work in review isn't listed
+here: `gh pr list` shows it, and each PR names its issue with `Fixes #n`.
+
+- The PR that finishes an item or bug sets its row to Done in the same PR, so the status is
+  right the moment it merges. A PR that finishes part of an item says which part.
+- A PR opened without that update: set the row when merging it.
+- **Now** in "Order of work" marks the current step; move it when a step is complete.
+- New scope gets a row (and an issue) before work starts.
+
+**Done before the roadmap** ([PR #2](https://github.com/sitzriese89/setup-assistant/pull/2)):
+game clock resets, unknown ride height, strict CSV import, tied votes, places across the start
+line, Next run / suggestion guards, softer recurrence wording.
+
+**Bugs from the 2026-11-11 review** (not roadmap items, one PR each):
+
+| Bug | Issue | Status |
+|---|---|---|
+| ABS pulsing counts chassis and braking understeer for the same moment | [#45][45] | Open |
+| Toggling the demo truncates the run's recording | [#46][46] | Open |
+| Source line is empty or stale while not driving | [#47][47] | Open |
+| Removed problems leave their ticked changes in Next run | [#48][48] | Open |
+| Power oversteer after the corner is filed as mid-corner | [#49][49] | Open |
+| Negative ride height on hard strikes isn't counted as bottoming (after M3.10) | [#50][50] | Open |
+| Hardening: saved track maps, telemetry-thread panics, vertical median | [#51][51] | Open |
 
 ## Decisions behind this plan
 
@@ -44,7 +63,8 @@ changes of removed problems (#48), exit slides filed as mid-corner (#49), negati
 
 ## Order of work
 
-1. **M1**, except the items marked *after the alpha*.
+1. **M1**, except the items marked *after the alpha*. **Now** (the review bugs above are
+   done alongside).
 2. **Validation slice of M3:** M3.7 + M3.8 as one change with one ADR (both change what the
    understeer threshold means, so it is re-checked once), M3.9, M3.3 (the episode record), and
    a minimal M3.2: `evaluate` over local recordings with replay parity, before the CI baseline.
@@ -57,49 +77,49 @@ Items marked *after the alpha* stay open but don't block it.
 
 Missing, stale or broken data is visible and never becomes a measurement.
 
-| Item | Issue |
-|---|---|
-| M1.1 Source reports game, API version, car, track and available channels | [#3][3] |
-| M1.2 Show stale telemetry and unsupported game versions | [#4][4] |
-| M1.3 Crash-safe saving and visible save/recording health | [#5][5] |
-| M1.4 Clean worker shutdown and unique recording IDs | [#6][6] |
-| M1.5 Measure live polling cost with both windows open · *after the alpha* (recordings show a steady 10 ms interval) | [#7][7] |
-| M1.6 Command parity test between desktop app and ui_preview | [#8][8] |
-| M1.7 Playwright smoke tests for the main workflow · *after the alpha* | [#9][9] |
-| M1.8 Metadata sidecar with every recording | [#43][43] |
-| M1.9 Ask for a new session when the car or track changes (until M2.2) | [#44][44] |
+| Item | Issue | Status |
+|---|---|---|
+| M1.1 Source reports game, API version, car, track and available channels | [#3][3] | Done (#34) |
+| M1.2 Show stale telemetry and unsupported game versions | [#4][4] | Open |
+| M1.3 Crash-safe saving and visible save/recording health | [#5][5] | Open |
+| M1.4 Clean worker shutdown and unique recording IDs | [#6][6] | Open |
+| M1.5 Measure live polling cost with both windows open · *after the alpha* (recordings show a steady 10 ms interval) | [#7][7] | Open |
+| M1.6 Command parity test between desktop app and ui_preview | [#8][8] | Open |
+| M1.7 Playwright smoke tests for the main workflow · *after the alpha* | [#9][9] | Open |
+| M1.8 Metadata sidecar with every recording | [#43][43] | Open |
+| M1.9 Ask for a new session when the car or track changes (until M2.2) | [#44][44] | Open |
 
 ## M2 · Sessions and context
 
 History belongs to a car and track, records what was actually changed, and only calls a
 problem fixed with evidence.
 
-| Item | Issue | Depends on |
-|---|---|---|
-| M2.1 ADR: backend owns sessions | [#10][10] | |
-| M2.2 Backend session store per car + track | [#11][11] | M1.1, M1.3, M2.1 |
-| M2.3 Actual clicks, manual changes, editable history | [#12][12] | M2.2 |
-| M2.4 Problem lifecycle with per-place verification (ADR) | [#13][13] | M2.2, validation slice (M3.2 minimal, M3.3, M3.7, M3.8, M3.9) |
-| M2.5 Recurring spots need comparable driven runs · *after the alpha* | [#14][14] | M2.2, M2.4 |
-| M2.6 Track maps: shared geometry, per-class data, anchored names · *only anchored names before the alpha* | [#15][15] | M1.1 |
-| M2.7 Run notes and quick tags | [#16][16] | M2.2 |
+| Item | Issue | Depends on | Status |
+|---|---|---|---|
+| M2.1 ADR: backend owns sessions | [#10][10] | | Open |
+| M2.2 Backend session store per car + track | [#11][11] | M1.1, M1.3, M2.1 | Open |
+| M2.3 Actual clicks, manual changes, editable history | [#12][12] | M2.2 | Open |
+| M2.4 Problem lifecycle with per-place verification (ADR) | [#13][13] | M2.2, validation slice (M3.2 minimal, M3.3, M3.7, M3.8, M3.9) | Open |
+| M2.5 Recurring spots need comparable driven runs · *after the alpha* | [#14][14] | M2.2, M2.4 | Open |
+| M2.6 Track maps: shared geometry, per-class data, anchored names · *only anchored names before the alpha* | [#15][15] | M1.1 | Open |
+| M2.7 Run notes and quick tags | [#16][16] | M2.2 | Open |
 
 ## M3 · Evidence → alpha gate
 
 Detectors are checked against real laps, and drivers can see why something was flagged.
 
-| Item | Issue | Depends on |
-|---|---|---|
-| M3.1 `excerpt` tool and real-recording fixtures | [#17][17] | M1.8 |
-| M3.2 `evaluate` tool with baseline check in CI (a minimal version with replay parity first) | [#18][18] | M3.1 for the CI baseline |
-| M3.3 Detection evidence and calibration progress (episode record) | [#19][19] | |
-| M3.4 Severity per pass vs per minute | [#20][20] | M2.4, M3.2, M3.9 |
-| M3.5 Rule coverage, no-aero fallback, ranking diagnostics | [#21][21] | |
-| M3.6 Collect recordings on 3 tracks, incl. known-answer runs (driver task, already under way) | [#22][22] | |
-| M3.7 Understeer in road-wheel degrees, not steering-wheel degrees | [#35][35] | M1.1; together with M3.8 |
-| M3.8 Learn the steering geometry from the zero-speed intercept | [#40][40] | together with M3.7 |
-| M3.9 Phase hysteresis: one episode per phase | [#41][41] | |
-| M3.10 Tell kerb strikes apart from bottoming | [#42][42] | |
+| Item | Issue | Depends on | Status |
+|---|---|---|---|
+| M3.1 `excerpt` tool and real-recording fixtures | [#17][17] | M1.8 | Open |
+| M3.2 `evaluate` tool with baseline check in CI (a minimal version with replay parity first) | [#18][18] | M3.1 for the CI baseline | Open |
+| M3.3 Detection evidence and calibration progress (episode record) | [#19][19] | | Open |
+| M3.4 Severity per pass vs per minute | [#20][20] | M2.4, M3.2, M3.9 | Open |
+| M3.5 Rule coverage, no-aero fallback, ranking diagnostics | [#21][21] | | Open |
+| M3.6 Collect recordings on 3 tracks, incl. known-answer runs (driver task) | [#22][22] | | In progress: Hockenheim and Red Bull Ring recorded ([sim-testing.md](sim-testing.md)) |
+| M3.7 Understeer in road-wheel degrees, not steering-wheel degrees | [#35][35] | M1.1; together with M3.8 | Partly done (#37: steering lock recorded, road-wheel balance in `replay`) |
+| M3.8 Learn the steering geometry from the zero-speed intercept | [#40][40] | together with M3.7 | Open |
+| M3.9 Phase hysteresis: one episode per phase | [#41][41] | | Open |
+| M3.10 Tell kerb strikes apart from bottoming | [#42][42] | | Done (#61) |
 
 **Alpha gate:** M1–M3 done (except items marked *after the alpha*), and on real recordings
 from at least 3 tracks:
@@ -113,28 +133,28 @@ from at least 3 tracks:
 
 ## M4 · Public alpha
 
-| Item | Issue |
-|---|---|
-| M4.1 Minimum Rust version and version consistency check | [#23][23] |
-| M4.2 Release workflow: unsigned NSIS installer, checksum, changelog | [#24][24] |
-| M4.3 Keyboard access and narrow layout | [#25][25] |
-| M4.4 Recording list: size, open folder, delete/export, 2 GB warning | [#26][26] |
+| Item | Issue | Status |
+|---|---|---|
+| M4.1 Minimum Rust version and version consistency check | [#23][23] | Open |
+| M4.2 Release workflow: unsigned NSIS installer, checksum, changelog | [#24][24] | Open |
+| M4.3 Keyboard access and narrow layout | [#25][25] | Open |
+| M4.4 Recording list: size, open folder, delete/export, 2 GB warning | [#26][26] | Open |
 
 ## M5 · Better tuning
 
-| Item | Issue | Depends on |
-|---|---|---|
-| M5.1 Car class profiles and value-aware advice | [#27][27] | M1.1, M2.3 |
-| M5.2 Driven-wheel wheelspin analysis | [#28][28] | |
-| M5.3 Per-corner run comparison table | [#29][29] | M2.2, M2.4 |
-| M5.4 Confirm RaceRoom tyre channel layout on a real stint | [#30][30] | |
-| M5.5 Context-aware tyre analysis | [#31][31] | M5.1, M5.4 |
+| Item | Issue | Depends on | Status |
+|---|---|---|---|
+| M5.1 Car class profiles and value-aware advice | [#27][27] | M1.1, M2.3 | Open |
+| M5.2 Driven-wheel wheelspin analysis | [#28][28] | | Open |
+| M5.3 Per-corner run comparison table | [#29][29] | M2.2, M2.4 | Open |
+| M5.4 Confirm RaceRoom tyre channel layout on a real stint | [#30][30] | | Open |
+| M5.5 Context-aware tyre analysis | [#31][31] | M5.1, M5.4 | Open |
 
 ## M6 · Le Mans Ultimate
 
-| Item | Issue | Depends on |
-|---|---|---|
-| M6.1 Le Mans Ultimate telemetry adapter | [#32][32] | M1.1 |
+| Item | Issue | Depends on | Status |
+|---|---|---|---|
+| M6.1 Le Mans Ultimate telemetry adapter | [#32][32] | M1.1 | Open |
 
 ## How to work through it
 
@@ -187,3 +207,10 @@ from at least 3 tracks:
 [42]: https://github.com/sitzriese89/setup-assistant/issues/42
 [43]: https://github.com/sitzriese89/setup-assistant/issues/43
 [44]: https://github.com/sitzriese89/setup-assistant/issues/44
+[45]: https://github.com/sitzriese89/setup-assistant/issues/45
+[46]: https://github.com/sitzriese89/setup-assistant/issues/46
+[47]: https://github.com/sitzriese89/setup-assistant/issues/47
+[48]: https://github.com/sitzriese89/setup-assistant/issues/48
+[49]: https://github.com/sitzriese89/setup-assistant/issues/49
+[50]: https://github.com/sitzriese89/setup-assistant/issues/50
+[51]: https://github.com/sitzriese89/setup-assistant/issues/51

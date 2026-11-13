@@ -227,6 +227,7 @@ mod telemetry_tests {
     #[test]
     fn recordings_replay_the_same() {
         let dir = std::env::temp_dir().join(format!("setup-core-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("lap.csv");
         let mut rec = recording::Recorder::create(&path).unwrap();
         let lap = demo::lap(0.0);
@@ -348,6 +349,7 @@ mod telemetry_tests {
     #[test]
     fn bad_recording_rows_are_rejected_not_shifted() {
         let dir = std::env::temp_dir().join(format!("setup-core-csv-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("bad.csv");
         let mut rec = recording::Recorder::create(&path).unwrap();
         rec.write(&demo::lap(0.0)[500]).unwrap();
@@ -486,6 +488,71 @@ mod telemetry_tests {
         let behaviors: Vec<_> = status.report.detected.iter().map(|d| d.symptom.behavior.as_str()).collect();
         assert!(!behaviors.contains(&"bottoming"), "{behaviors:?}");
         assert!(behaviors.contains(&"front_lockup"), "analysis ran: {behaviors:?}");
+    }
+
+    #[test]
+    fn recordings_are_never_overwritten() {
+        let dir = std::env::temp_dir().join(format!("setup-core-unique-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("session-1-run1.csv");
+        let (mut first, p1) = recording::Recorder::create_unique(&path).unwrap();
+        first.write(&demo::lap(0.0)[0]).unwrap();
+        first.flush().unwrap();
+        drop(first);
+        assert!(recording::Recorder::create(&path).is_err(), "plain create must not truncate");
+        let (_, p2) = recording::Recorder::create_unique(&path).unwrap();
+        assert_eq!(p1, path);
+        assert_eq!(p2, dir.join("session-1-run1-2.csv"));
+        assert_eq!(recording::read(&p1).unwrap().len(), 1, "first recording kept");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Plays demo laps forever, 100 samples per poll.
+    struct EndlessLaps {
+        buffer: Vec<Sample>,
+        next: usize,
+    }
+
+    impl live::Source for EndlessLaps {
+        fn poll(&mut self) -> live::Poll {
+            if self.next + 100 > self.buffer.len() {
+                let t0 = self.buffer.last().map_or(0.0, |s| s.time + 0.01);
+                self.buffer = demo::lap(t0);
+                self.next = 0;
+            }
+            self.next += 100;
+            live::Poll::Samples(self.buffer[self.next - 100..self.next].to_vec())
+        }
+    }
+
+    #[test]
+    fn toggling_the_demo_keeps_the_run_recording() {
+        let dir = std::env::temp_dir().join(format!("setup-core-toggle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let session =
+            live::LiveSession::start(Box::new(EndlessLaps { buffer: Vec::new(), next: 0 }), Some(dir.clone()));
+        let rules = RuleBook::builtin();
+        let wait_for = |what: &str, ok: &dyn Fn(&live::LiveStatus) -> bool| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            loop {
+                let st = session.status(&rules);
+                if ok(&st) {
+                    return st;
+                }
+                assert!(std::time::Instant::now() < deadline, "timed out waiting for {what}");
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        };
+        let first = wait_for("a recording", &|st| st.report.driving_seconds > 5.0 && st.recording.is_some());
+        let first = std::path::PathBuf::from(first.recording.unwrap());
+        session.set_demo(true);
+        let kept = std::fs::metadata(&first).unwrap().len();
+        assert!(kept > 1000, "first recording has data");
+        session.set_demo(false);
+        let second = wait_for("a new recording", &|st| st.recording.as_deref().is_some_and(|p| p.ends_with("-2.csv")));
+        assert!(std::fs::metadata(&first).unwrap().len() >= kept, "first recording was truncated");
+        assert_ne!(std::path::PathBuf::from(second.recording.unwrap()), first);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
 

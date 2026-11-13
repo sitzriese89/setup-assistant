@@ -148,9 +148,11 @@ impl Inner {
         }
         if self.recorder.is_none() {
             let dir = self.record_dir.as_ref()?;
+            // The same run can be reopened (e.g. after the demo was switched on and off):
+            // that gets a new file, the earlier one is kept.
             let path = dir.join(format!("session-{}-run{}.csv", self.session_id, self.run));
-            match Recorder::create(&path) {
-                Ok(r) => self.recorder = Some((r, path)),
+            match Recorder::create_unique(&path) {
+                Ok((r, path)) => self.recorder = Some((r, path)),
                 Err(e) => {
                     eprintln!("recording disabled: {e}");
                     self.record_dir = None;

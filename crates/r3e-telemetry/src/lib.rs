@@ -307,8 +307,8 @@ mod tests {
     #[test]
     fn left_tyres_flip_inner_and_outer() {
         let mut d: Shared = unsafe { std::mem::zeroed() };
-        for i in 0..4 {
-            d.tire_temp[i].current_temp = [1.0, 2.0, 3.0]; // left, center, right
+        for t in &mut d.tire_temp {
+            t.current_temp = [1.0, 2.0, 3.0]; // left, center, right
         }
         let s = super::to_sample(&d);
         assert_eq!(s.tyre_temp[0], [3.0, 2.0, 1.0], "FL: inner is the right edge");

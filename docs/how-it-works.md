@@ -123,10 +123,12 @@ Next to every recording is a sidecar with the same name and `.json`
 (`session-…-run1.json`): app version and commit, game, API version, car, track, session type,
 available channels, session and run number, the thresholds in use, and events with the row
 and game time they happened at: reset, analysis restarted after an error, source changed
-(car, track, session or channels), end of recording. A sidecar without an end event means the
-app stopped while recording. `replay` uses it to mask missing channels and wrap places at the
-start line, as live; recordings from before sidecars (2026-11-13) replay without it, assuming
-every channel and an unknown lap length.
+(car, track, session or channels), end of recording. Quitting the app (closing the main window,
+even with the overlay open) stops telemetry, saves the track map and closes the recording with
+its end event, so a sidecar without an end event means the app crashed or was killed while
+recording. `replay` uses the sidecar to mask missing channels and wrap places at the start
+line, as live; recordings from before sidecars (2026-11-13) replay without it, assuming every
+channel and an unknown lap length.
 
 All thresholds live in `Thresholds` in `telemetry.rs`. Most are still first guesses; the braking
 split was checked against two real recordings (31 + 7 minutes, Mount Panorama, GT3).

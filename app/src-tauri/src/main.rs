@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use serde::Serialize;
 use setup_core::live::{LiveSession, LiveStatus};
 use setup_core::{BehaviorInfo, CarContext, History, ParamInfo, RuleBook, Suggestion, Symptom};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 struct AppState {
     rules: RuleBook,
@@ -157,6 +157,18 @@ fn main() {
             overlay_show,
             overlay_lock
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the app");
+        .build(tauri::generate_context!())
+        .expect("error while building the app")
+        .run(|app, event| match event {
+            // The overlay alone doesn't keep the app open: closing the main window quits.
+            RunEvent::WindowEvent { label, event: WindowEvent::Destroyed, .. } if label == "main" => app.exit(0),
+            // Last stop before the process ends: stop telemetry, add the run to the track
+            // map, save it and close the recording.
+            RunEvent::Exit => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.live.shutdown();
+                }
+            }
+            _ => {}
+        });
 }

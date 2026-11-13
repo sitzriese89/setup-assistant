@@ -6,7 +6,9 @@
 //! run's balance is kept for comparison.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -235,6 +237,42 @@ fn demo_variant(run: u32) -> Variant {
 #[derive(Clone)]
 pub struct LiveSession {
     inner: Arc<Mutex<Inner>>,
+    worker: Arc<Worker>,
+}
+
+/// The telemetry thread and how to stop it. Shut down explicitly with
+/// [`LiveSession::shutdown`]; dropping the last session handle does the same.
+struct Worker {
+    inner: Arc<Mutex<Inner>>,
+    stop: Arc<AtomicBool>,
+    thread: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl Worker {
+    fn shutdown(&self) {
+        // Held throughout, so a second caller waits for the first and then finds nothing to do.
+        let mut thread = self.thread.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(handle) = thread.take() else { return };
+        self.stop.store(true, Ordering::Relaxed);
+        // The thread finishes its current poll and exits. Joined first, so no sample
+        // arrives after the recording is closed.
+        if handle.join().is_err() {
+            eprintln!("telemetry thread had stopped with a panic");
+        }
+        let mut st = lock(&self.inner);
+        let report = st.analyzer.report();
+        if let Some(map) = st.track.as_mut() {
+            map.add_run(&report);
+        }
+        st.save_track();
+        st.close_recording();
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
 }
 
 /// Locks the session state. A panic while it was held (caught in the telemetry thread)
@@ -277,75 +315,88 @@ impl LiveSession {
             identity: None,
         }));
         let shared = inner.clone();
-        std::thread::Builder::new()
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopped = stop.clone();
+        let thread = std::thread::Builder::new()
             .name("telemetry".into())
-            .spawn(move || loop {
-                let step = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let mut st = lock(&shared);
-                    let poll = match st.demo.as_mut() {
-                        Some(demo) => Poll::Samples(demo.due()),
-                        None => source.poll(),
-                    };
-                    match st.demo.as_ref() {
-                        Some(demo) => {
-                            let id = demo.identity();
-                            st.set_identity(Some(id));
-                        }
-                        None => match source.identity() {
-                            Some(id) => st.set_identity(Some(id)),
-                            // Sources that only know the track.
-                            None => st.set_track(source.track()),
-                        },
-                    }
-                    match poll {
-                        Poll::NotRunning => {
-                            st.connection = Connection::Waiting;
-                            st.identity = None;
-                        }
-                        Poll::Idle => st.connection = Connection::Connected,
-                        Poll::Samples(samples) => {
-                            if !samples.is_empty() {
-                                st.last_sample = Some(Instant::now());
+            .spawn(move || {
+                while !stopped.load(Ordering::Relaxed) {
+                    let step = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let mut st = lock(&shared);
+                        let poll = match st.demo.as_mut() {
+                            Some(demo) => Poll::Samples(demo.due()),
+                            None => source.poll(),
+                        };
+                        match st.demo.as_ref() {
+                            Some(demo) => {
+                                let id = demo.identity();
+                                st.set_identity(Some(id));
                             }
-                            let channels = st.identity.as_ref().map_or(Channels::ALL, |i| i.channels);
-                            for s in &samples {
-                                st.analyzer.push(s);
-                                if let Some(map) = st.track.as_mut() {
-                                    if channels == Channels::ALL {
-                                        map.add(s);
-                                    } else {
-                                        map.add(&channels.mask(s));
+                            None => match source.identity() {
+                                Some(id) => st.set_identity(Some(id)),
+                                // Sources that only know the track.
+                                None => st.set_track(source.track()),
+                            },
+                        }
+                        match poll {
+                            Poll::NotRunning => {
+                                st.connection = Connection::Waiting;
+                                st.identity = None;
+                            }
+                            Poll::Idle => st.connection = Connection::Connected,
+                            Poll::Samples(samples) => {
+                                if !samples.is_empty() {
+                                    st.last_sample = Some(Instant::now());
+                                }
+                                let channels = st.identity.as_ref().map_or(Channels::ALL, |i| i.channels);
+                                for s in &samples {
+                                    st.analyzer.push(s);
+                                    if let Some(map) = st.track.as_mut() {
+                                        if channels == Channels::ALL {
+                                            map.add(s);
+                                        } else {
+                                            map.add(&channels.mask(s));
+                                        }
+                                    }
+                                    if let Some(r) = st.recorder() {
+                                        let _ = r.write(s);
                                     }
                                 }
-                                if let Some(r) = st.recorder() {
-                                    let _ = r.write(s);
-                                }
+                                let fresh = st.last_sample.is_some_and(|t| t.elapsed() < Duration::from_secs(1));
+                                st.connection = if fresh { Connection::Driving } else { Connection::Connected };
                             }
-                            let fresh = st.last_sample.is_some_and(|t| t.elapsed() < Duration::from_secs(1));
-                            st.connection = if fresh { Connection::Driving } else { Connection::Connected };
                         }
-                    }
-                    if st.track.is_some() && st.last_track_save.elapsed() > Duration::from_secs(30) {
-                        st.save_track();
-                    }
-                    if st.last_flush.elapsed() > Duration::from_secs(2) {
-                        if let Some(r) = st.recorder.as_mut() {
-                            let _ = r.csv.flush();
+                        if st.track.is_some() && st.last_track_save.elapsed() > Duration::from_secs(30) {
+                            st.save_track();
                         }
-                        st.last_flush = Instant::now();
+                        if st.last_flush.elapsed() > Duration::from_secs(2) {
+                            if let Some(r) = st.recorder.as_mut() {
+                                let _ = r.csv.flush();
+                            }
+                            st.last_flush = Instant::now();
+                        }
+                    }));
+                    if step.is_err() {
+                        // A bug in analysis must not stop telemetry for the rest of the session
+                        // (release builds have no console to show it): start the run's analysis fresh.
+                        let mut st = lock(&shared);
+                        st.analyzer.reset();
+                        st.log(|at| SidecarEvent::AnalysisRestarted { at });
                     }
-                }));
-                if step.is_err() {
-                    // A bug in analysis must not stop telemetry for the rest of the session
-                    // (release builds have no console to show it): start the run's analysis fresh.
-                    let mut st = lock(&shared);
-                    st.analyzer.reset();
-                    st.log(|at| SidecarEvent::AnalysisRestarted { at });
+                    std::thread::sleep(Duration::from_millis(10));
                 }
-                std::thread::sleep(Duration::from_millis(10));
             })
             .expect("failed to start telemetry thread");
-        Self { inner }
+        let worker = Arc::new(Worker { inner: inner.clone(), stop, thread: Mutex::new(Some(thread)) });
+        Self { inner, worker }
+    }
+
+    /// Stops the telemetry thread and waits for it, then adds this run to the track map,
+    /// saves the map and closes the recording (flushed, with an end event in its sidecar).
+    /// Call it when the app exits. Calling it again does nothing; commands still answer
+    /// afterwards, but no more telemetry is read.
+    pub fn shutdown(&self) {
+        self.worker.shutdown();
     }
 
     pub fn status(&self, rules: &RuleBook) -> LiveStatus {

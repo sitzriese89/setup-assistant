@@ -34,8 +34,10 @@ be done without them; if so, say so in your report.
 
 **Git and PR**
 - Branch `<type>/<short-name>`. Use the Bash tool for git and gh. Commit with
-  `git commit -F <message file in your temp dir>`; messages end with a blank line and
-  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+  `git commit -F msg-<n>.txt`, written fresh in your temp dir for every commit (the
+  coordinator and other workers keep their own message files there). Messages end with a
+  blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Check
+  `git log -1` before pushing: a pushed commit can't be rewritten.
 - PR body: what and why, how it was tested, `Fixes #<n>`, ending with
   `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - After `gh pr create`, set the item's row in docs/roadmap.md to `Done (#<PR>)` in a follow-up

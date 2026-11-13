@@ -29,13 +29,13 @@ line, Next run / suggestion guards, softer recurrence wording.
 
 | Bug | Issue | Status |
 |---|---|---|
-| ABS pulsing counts chassis and braking understeer for the same moment | [#45][45] | Open |
-| Toggling the demo truncates the run's recording | [#46][46] | Open |
-| Source line is empty or stale while not driving | [#47][47] | Open |
-| Removed problems leave their ticked changes in Next run | [#48][48] | Open |
-| Power oversteer after the corner is filed as mid-corner | [#49][49] | Open |
+| ABS pulsing counts chassis and braking understeer for the same moment | [#45][45] | Done (#53) |
+| Toggling the demo truncates the run's recording | [#46][46] | Done (#56) |
+| Source line is empty or stale while not driving | [#47][47] | Done (#57) |
+| Removed problems leave their ticked changes in Next run | [#48][48] | Done (#58) |
+| Power oversteer after the corner is filed as mid-corner | [#49][49] | Done (#54) |
 | Negative ride height on hard strikes isn't counted as bottoming (after M3.10) | [#50][50] | Done (#55) |
-| Hardening: saved track maps, telemetry-thread panics, vertical median | [#51][51] | Open |
+| Hardening: saved track maps, telemetry-thread panics, vertical median | [#51][51] | Done (#59) |
 
 ## Decisions behind this plan
 
@@ -64,7 +64,7 @@ line, Next run / suggestion guards, softer recurrence wording.
 ## Order of work
 
 1. **M1**, except the items marked *after the alpha*. **Now** (the review bugs above are
-   done alongside).
+   all done).
 2. **Validation slice of M3:** M3.7 + M3.8 as one change with one ADR (both change what the
    understeer threshold means, so it is re-checked once), M3.9, M3.3 (the episode record), and
    a minimal M3.2: `evaluate` over local recordings with replay parity, before the CI baseline.

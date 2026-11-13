@@ -295,7 +295,9 @@ pub struct LiveReport {
 }
 
 /// Tuning knobs. Defaults are first guesses; replay recordings to tune them.
-#[derive(Debug, Clone)]
+/// Saved in every recording's sidecar; fields missing there read as today's defaults.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Thresholds {
     /// Below this, cornering counts as "slow".
     pub slow_corner_kmh: f32,

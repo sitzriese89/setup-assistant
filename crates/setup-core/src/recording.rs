@@ -5,7 +5,10 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use crate::telemetry::Sample;
+use serde::{Deserialize, Serialize};
+
+use crate::live::SourceIdentity;
+use crate::telemetry::{Sample, Thresholds};
 
 const HEADER: &str = "time,speed,throttle,brake,steer,yaw_rate,lat_accel,lat_velocity,\
 ws_fl,ws_fr,ws_rl,ws_rr,\
@@ -14,6 +17,8 @@ p_fl,p_fr,p_rl,p_rr,rh_fl,rh_fr,rh_rl,rh_rr,gear,steer_range_deg,vert_accel,lap_
 
 pub struct Recorder {
     out: BufWriter<File>,
+    rows: u64,
+    last_time: Option<f64>,
 }
 
 impl Recorder {
@@ -25,7 +30,7 @@ impl Recorder {
         let file = File::options().write(true).create_new(true).open(path)?;
         let mut out = BufWriter::new(file);
         writeln!(out, "{HEADER}")?;
-        Ok(Self { out })
+        Ok(Self { out, rows: 0, last_time: None })
     }
 
     /// Like [`create`](Self::create), but if `path` is taken, uses `<name>-2.csv`, `<name>-3.csv`, …
@@ -60,7 +65,15 @@ impl Recorder {
         f.push(format!("{:.2}", s.lap_distance));
         f.push(s.elevation.map(|e| format!("{e:.3}")).unwrap_or_default());
         f.push(format!("{}", s.steer_lock_deg));
-        writeln!(self.out, "{}", f.join(","))
+        writeln!(self.out, "{}", f.join(","))?;
+        self.rows += 1;
+        self.last_time = Some(s.time);
+        Ok(())
+    }
+
+    /// Where the recording is now: rows written and the time of the last one.
+    pub fn mark(&self) -> Mark {
+        Mark { rows: self.rows, time: self.last_time }
     }
 
     pub fn flush(&mut self) -> io::Result<()> {
@@ -173,4 +186,134 @@ pub fn read_checked(path: &Path) -> io::Result<Imported> {
         out.samples.push(s);
     }
     Ok(out)
+}
+
+/// Version of the sidecar layout. Bump it when a field changes meaning; new optional fields
+/// don't need it.
+pub const SIDECAR_SCHEMA: u32 = 1;
+
+/// A point in a recording: rows written so far and the game time of the last one.
+/// Rows are unambiguous; the game clock can restart within a recording (ADR-18).
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct Mark {
+    pub rows: u64,
+    /// Game time (s) of the last row, if any was written.
+    pub time: Option<f64>,
+}
+
+/// Something that happened during a recording.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SidecarEvent {
+    /// The driver cleared the run's analysis ("Reset").
+    Reset { at: Mark },
+    /// The analysis hit a bug and started over.
+    AnalysisRestarted { at: Mark },
+    /// The source reported a different game, car, track, session or channels.
+    Identity { at: Mark, source: Box<SourceIdentity> },
+    /// The recording was closed (next run, new session, demo switched on). Missing if the app
+    /// stopped while recording.
+    End { at: Mark },
+}
+
+/// What a recording can't say about itself, saved as `<recording>.json` next to the CSV.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Sidecar {
+    pub schema: u32,
+    pub app_version: String,
+    /// Git commit the app was built from, if known.
+    pub commit: Option<String>,
+    /// When the recording started (Unix seconds).
+    pub created: u64,
+    pub session_id: u64,
+    pub run: u32,
+    pub demo: bool,
+    /// Game, car, track, session and channels when the recording started.
+    pub source: Option<SourceIdentity>,
+    pub thresholds: Thresholds,
+    #[serde(default)]
+    pub events: Vec<SidecarEvent>,
+}
+
+impl Sidecar {
+    /// A sidecar for a recording starting now, made by this build of the app.
+    pub fn new(session_id: u64, run: u32, demo: bool, source: Option<SourceIdentity>, thresholds: Thresholds) -> Self {
+        Self {
+            schema: SIDECAR_SCHEMA,
+            app_version: env!("CARGO_PKG_VERSION").to_string(),
+            commit: option_env!("SETUP_ASSISTANT_COMMIT").map(str::to_string),
+            created: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
+            session_id,
+            run,
+            demo,
+            source,
+            thresholds,
+            events: Vec::new(),
+        }
+    }
+
+    /// The identity in effect at the end: the last identity event, else the one at the start.
+    pub fn last_source(&self) -> Option<&SourceIdentity> {
+        let changed = self.events.iter().rev().find_map(|e| match e {
+            SidecarEvent::Identity { source, .. } => Some(&**source),
+            _ => None,
+        });
+        changed.or(self.source.as_ref())
+    }
+}
+
+/// The sidecar file of the recording at `csv`: same name, `.json`.
+pub fn sidecar_path(csv: &Path) -> PathBuf {
+    csv.with_extension("json")
+}
+
+/// Keeps a recording's sidecar on disk. The whole file is rewritten on every event (they are
+/// rare) through a temporary file and a rename, so it is always complete, valid JSON.
+pub struct SidecarWriter {
+    path: PathBuf,
+    data: Sidecar,
+}
+
+impl SidecarWriter {
+    /// Writes `data` as the sidecar of the recording at `csv`.
+    pub fn create(csv: &Path, data: Sidecar) -> io::Result<Self> {
+        let w = Self { path: sidecar_path(csv), data };
+        w.save()?;
+        Ok(w)
+    }
+
+    pub fn data(&self) -> &Sidecar {
+        &self.data
+    }
+
+    /// Adds `event` and saves. An identity event that doesn't change the identity is left out.
+    pub fn push(&mut self, event: SidecarEvent) -> io::Result<()> {
+        if let SidecarEvent::Identity { source, .. } = &event {
+            if self.data.last_source() == Some(&**source) {
+                return Ok(());
+            }
+        }
+        self.data.events.push(event);
+        self.save()
+    }
+
+    fn save(&self) -> io::Result<()> {
+        let json = serde_json::to_vec_pretty(&self.data).map_err(io::Error::other)?;
+        let mut tmp = self.path.clone().into_os_string();
+        tmp.push(".tmp");
+        std::fs::write(&tmp, json)?;
+        std::fs::rename(&tmp, &self.path)
+    }
+}
+
+/// Reads the sidecar of the recording at `csv`. `Ok(None)` if there is none (recordings made
+/// before sidecars existed).
+pub fn read_sidecar(csv: &Path) -> io::Result<Option<Sidecar>> {
+    match std::fs::read(sidecar_path(csv)) {
+        Ok(bytes) => {
+            serde_json::from_slice(&bytes).map(Some).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
 }

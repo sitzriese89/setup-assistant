@@ -2,7 +2,8 @@
 //!
 //! A session is split into runs: the driver drives, changes the setup, then
 //! starts the next run. Each run gets a fresh analyzer (the car changed) and its
-//! own recording file; the previous run's balance is kept for comparison.
+//! own recording file (with a JSON sidecar, see [`crate::recording::Sidecar`]); the previous
+//! run's balance is kept for comparison.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -11,7 +12,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::demo::{DemoSource, Variant};
-use crate::recording::Recorder;
+use crate::recording::{Mark, Recorder, Sidecar, SidecarEvent, SidecarWriter};
 use crate::rules::RuleBook;
 use crate::telemetry::{Analyzer, Channels, LiveReport, PhaseBalance, Sample};
 use crate::track::{TrackInfo, TrackMap, TrackView};
@@ -113,6 +114,13 @@ pub struct LiveStatus {
     pub unavailable: Vec<String>,
 }
 
+/// The run's open recording: the CSV and its sidecar (if that could be written).
+struct Recording {
+    csv: Recorder,
+    path: PathBuf,
+    sidecar: Option<SidecarWriter>,
+}
+
 struct Inner {
     analyzer: Analyzer,
     demo: Option<DemoSource>,
@@ -122,7 +130,7 @@ struct Inner {
     previous_balance: Vec<PhaseBalance>,
     record_dir: Option<PathBuf>,
     session_id: u64,
-    recorder: Option<(Recorder, PathBuf)>,
+    recorder: Option<Recording>,
     last_flush: Instant,
     track_dir: Option<PathBuf>,
     track: Option<TrackMap>,
@@ -139,6 +147,8 @@ impl Inner {
         }
         self.analyzer.set_channels(identity.channels);
         self.set_track(identity.track.clone());
+        // Unchanged identities (e.g. back after the game was closed) are left out by the writer.
+        self.log(|at| SidecarEvent::Identity { at, source: Box::new(identity.clone()) });
         self.identity = Some(identity);
     }
 
@@ -152,7 +162,20 @@ impl Inner {
             // that gets a new file, the earlier one is kept.
             let path = dir.join(format!("session-{}-run{}.csv", self.session_id, self.run));
             match Recorder::create_unique(&path) {
-                Ok((r, path)) => self.recorder = Some((r, path)),
+                Ok((csv, path)) => {
+                    let data = Sidecar::new(
+                        self.session_id,
+                        self.run,
+                        self.demo.is_some(),
+                        self.identity.clone(),
+                        self.analyzer.thresholds.clone(),
+                    );
+                    // Without a sidecar the recording is still worth having.
+                    let sidecar = SidecarWriter::create(&path, data)
+                        .map_err(|e| eprintln!("recording sidecar disabled: {e}"))
+                        .ok();
+                    self.recorder = Some(Recording { csv, path, sidecar });
+                }
                 Err(e) => {
                     eprintln!("recording disabled: {e}");
                     self.record_dir = None;
@@ -160,7 +183,16 @@ impl Inner {
                 }
             }
         }
-        self.recorder.as_mut().map(|(r, _)| r)
+        self.recorder.as_mut().map(|r| &mut r.csv)
+    }
+
+    /// Notes an event in the open recording's sidecar, at the recording's current position.
+    fn log(&mut self, event: impl FnOnce(Mark) -> SidecarEvent) {
+        let Some(rec) = self.recorder.as_mut() else { return };
+        let Some(sidecar) = rec.sidecar.as_mut() else { return };
+        if let Err(e) = sidecar.push(event(rec.csv.mark())) {
+            eprintln!("couldn't update recording sidecar: {e}");
+        }
     }
 
     /// Switches to the map of `info` (loading it from disk), saving the previous one.
@@ -184,8 +216,9 @@ impl Inner {
     }
 
     fn close_recording(&mut self) {
-        if let Some((mut r, _)) = self.recorder.take() {
-            let _ = r.flush();
+        self.log(|at| SidecarEvent::End { at });
+        if let Some(mut r) = self.recorder.take() {
+            let _ = r.csv.flush();
         }
     }
 }
@@ -296,8 +329,8 @@ impl LiveSession {
                         st.save_track();
                     }
                     if st.last_flush.elapsed() > Duration::from_secs(2) {
-                        if let Some((r, _)) = st.recorder.as_mut() {
-                            let _ = r.flush();
+                        if let Some(r) = st.recorder.as_mut() {
+                            let _ = r.csv.flush();
                         }
                         st.last_flush = Instant::now();
                     }
@@ -305,7 +338,9 @@ impl LiveSession {
                 if step.is_err() {
                     // A bug in analysis must not stop telemetry for the rest of the session
                     // (release builds have no console to show it): start the run's analysis fresh.
-                    lock(&shared).analyzer.reset();
+                    let mut st = lock(&shared);
+                    st.analyzer.reset();
+                    st.log(|at| SidecarEvent::AnalysisRestarted { at });
                 }
                 std::thread::sleep(Duration::from_millis(10));
             })
@@ -335,7 +370,7 @@ impl LiveSession {
             run: st.run,
             report,
             previous_balance: st.previous_balance.clone(),
-            recording: st.recorder.as_ref().map(|(_, p)| p.display().to_string()),
+            recording: st.recorder.as_ref().map(|r| r.path.display().to_string()),
             track: st.track.as_ref().map(|m| m.view()),
             car_at,
             unavailable: st.identity.as_ref().map(|i| i.channels.unavailable()).unwrap_or_default(),
@@ -348,6 +383,7 @@ impl LiveSession {
         let mut st = self.lock();
         st.analyzer.reset();
         st.last_sample = None;
+        st.log(|at| SidecarEvent::Reset { at });
     }
 
     /// The setup was changed: start a fresh analysis and recording, remember this run's balance.

@@ -60,7 +60,7 @@ crates/setup-core/           game-agnostic core (no game, no UI code)
   src/telemetry.rs           Sample + Analyzer: detects problems from telemetry
   src/track.rs               learned track map: corners, crests, compressions
   src/live.rs                background polling of a Source, runs, recording
-  src/recording.rs           CSV recordings
+  src/recording.rs           CSV recordings and their JSON sidecars
   src/demo.rs                synthetic laps and demo track (tests + demo mode)
   rules/gt.json              setup knowledge
   examples/ui_preview.rs     serves app/ui in a browser
@@ -83,8 +83,9 @@ references fail `builtin_rules_are_valid`.
 ### Tune detection
 
 Thresholds live in `Thresholds` in `crates/setup-core/src/telemetry.rs`. Please back changes
-with recordings: drive, find the CSV in `%APPDATA%\dev.simracing.setupassistant\recordings`,
-and compare `replay` output before and after. Say in the PR which car/track you tested and
+with recordings: drive, find the CSV in `%APPDATA%\dev.simracing.setupassistant\recordings`
+(its `.json` sidecar names the car, track, channels and thresholds), and compare `replay`
+output before and after. Say in the PR which car/track you tested and
 what you felt in the car.
 
 ### Add a game

@@ -28,6 +28,8 @@ good and bad). Statuses: *Accepted*, *Superseded by ADR-n*, *Proposed*.
 | 17 | [Develop the UI in a normal browser](#adr-17-develop-the-ui-in-a-normal-browser) | Accepted |
 | 18 | [Treat bad or missing data as unknown, never as a reading](#adr-18-treat-bad-or-missing-data-as-unknown-never-as-a-reading) | Accepted |
 | 19 | [Sources describe themselves; missing channels are masked](#adr-19-sources-describe-themselves-missing-channels-are-masked) | Accepted |
+| 20 | [Bottoming needs both wheels of an axle; kerbs aren't reported](#adr-20-bottoming-needs-both-wheels-of-an-axle-kerbs-arent-reported) | Accepted |
+| 21 | [Every recording gets a JSON sidecar](#adr-21-every-recording-gets-a-json-sidecar) | Accepted |
 
 ---
 
@@ -362,3 +364,27 @@ problem by default. No new threshold; the 8 mm threshold is unchanged.
 negative ones #50 starts counting. A splitter scraping on one corner only (heavy roll) is no
 longer reported; if real recordings show that, it needs its own rule. Whether real axle-wide
 scraping is caught is still to be checked on track (sim-testing T5).
+
+## ADR-21: Every recording gets a JSON sidecar
+
+**Context.** A recording (ADR-14) is bare CSV. Car, track, app version, thresholds, the channel
+mask (ADR-19), resets and run boundaries were only in hand-written notes in
+docs/sim-testing.md, so replay, `excerpt` and `evaluate` (roadmap M3) couldn't trust them (#43).
+
+**Decision.** When a recording starts, `<recording>.json` is written next to it, with the
+CSV's name (including the `-2`, `-3` suffixes of reopened runs): schema version, app version and
+git commit (from `setup-core`'s build script), start time, session ID, run, demo flag, the
+source identity and the thresholds. Events are added with their position, as rows written and
+game time of the last row (rows, because the game clock can restart, ADR-18): reset by the
+driver, analysis restarted after an error, identity changed, end of recording. The file is one
+JSON object, rewritten whole on each event through a temporary file and a rename: events are a
+handful per run, and readers always see a complete document. Append-only JSON lines were
+simpler to write but harder to read and validate as one record. The CSV format is unchanged;
+the sidecar is optional for readers, and a sidecar that can't be written doesn't stop the
+recording.
+
+**Consequences.** Recordings from now on name their car, track and channels, and `replay`
+masks and wraps places like the live session did. Recordings made earlier have no sidecar and
+replay as before. A sidecar without an end event means the app stopped while recording
+(clean shutdown is roadmap M1.4). New fields must be optional when read; a change in meaning
+bumps the schema version.

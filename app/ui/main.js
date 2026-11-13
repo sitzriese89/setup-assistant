@@ -23,6 +23,11 @@ const state = {
   // Earlier runs: changes made and problems they fixed. Sent with every suggest call.
   history: { applied: [], fixed: [] }, // fixed: [{ symptom, label }]
   run: 1,
+  // Game + car + track the session belongs to ({ key, label }), once known, and the
+  // ones the driver chose to keep the session for anyway. Until sessions per car + track
+  // exist (roadmap M2.2), a change asks for a new session.
+  context: null,
+  keptFor: [],
 };
 
 // The session survives app restarts.
@@ -38,6 +43,8 @@ function save() {
         tried: [...state.tried.entries()],
         history: state.history,
         run: state.run,
+        context: state.context,
+        keptFor: state.keptFor,
       }),
     );
   } catch (_) {}
@@ -52,6 +59,8 @@ function load() {
     state.tried = new Map(s.tried || []);
     state.history = s.history || state.history;
     state.run = s.run || 1;
+    state.context = s.context || null;
+    state.keptFor = s.keptFor || [];
   } catch (_) {}
 }
 
@@ -333,10 +342,85 @@ async function newSession() {
   state.symptoms = [];
   state.history = { applied: [], fixed: [] };
   state.run = 1;
+  // The next poll ties the new session to whatever car and track the game reports.
+  state.context = null;
+  state.keptFor = [];
+  hideContextPrompt();
   await invoke("live_new_session");
   renderProblems();
   refresh();
   pollLive();
+}
+
+// ---------- car / track of the session ----------
+
+/// { key, label } for the car and track the source reports, or null while either is unknown.
+function contextOf(source) {
+  if (!source || !source.car || !source.track || !source.car.id || !source.track.id) return null;
+  return {
+    key: `${source.game}|${source.car.id}|${source.track.id}`,
+    label: `${carName(source.car)} at ${source.track.name || source.track.id}`,
+  };
+}
+
+/// Nothing to lose yet: no problems, ticked changes or earlier runs.
+function sessionIsEmpty() {
+  const h = state.history;
+  return state.run === 1 && !state.symptoms.length && !state.tried.size && !h.applied.length && !h.fixed.length;
+}
+
+/// Called on every poll. An empty session silently takes the current car and track; a session
+/// with runs in it asks once per new car + track whether to start over.
+function checkContext(source) {
+  const now = contextOf(source);
+  if (!now) return; // not connected, or still in the menus without a car or track
+  if (sessionIsEmpty()) {
+    if (!state.context || state.context.key !== now.key) {
+      state.context = now;
+      state.keptFor = [];
+      save();
+    }
+    hideContextPrompt();
+    return;
+  }
+  if (state.context && state.context.key === now.key) return hideContextPrompt();
+  if (state.keptFor.includes(now.key)) return hideContextPrompt();
+  showContextPrompt(now);
+}
+
+function showContextPrompt(now) {
+  if (live.contextAsked && live.contextAsked.key === now.key) return;
+  live.contextAsked = now;
+  $("#context-prompt-text").textContent = state.context
+    ? `New car/track: ${now.label}. This session (run ${state.run}) is for ${state.context.label}. Start a new session?`
+    : `Now driving ${now.label}. This session (run ${state.run}) started before the car and track were known. Start a new session?`;
+  $("#context-prompt").hidden = false;
+}
+
+function hideContextPrompt() {
+  live.contextAsked = null;
+  $("#context-prompt").hidden = true;
+}
+
+async function contextNewSession() {
+  const now = live.contextAsked;
+  resetNewSessionButton();
+  await newSession();
+  if (now) {
+    state.context = now;
+    save();
+  }
+}
+
+/// Keep going with this session and don't ask again for this car + track.
+function contextKeep() {
+  const now = live.contextAsked;
+  if (!now) return;
+  // A session that didn't know its car and track yet belongs to this one from now on.
+  if (!state.context) state.context = now;
+  else if (!state.keptFor.includes(now.key)) state.keptFor.push(now.key);
+  save();
+  hideContextPrompt();
 }
 
 // ---------- results ----------
@@ -489,6 +573,8 @@ async function init() {
   // The run count lives here (it survives restarts); tell the backend.
   invoke("live_set_run", { run: state.run });
   $("#new-session").addEventListener("click", newSessionClicked);
+  $("#context-new").addEventListener("click", contextNewSession);
+  $("#context-keep").addEventListener("click", contextKeep);
   refresh();
   segmented($("#speed"), (v) => { state.draft.speed = v; });
   segmented($("#severity"), (v) => { state.draft.severity = v; });
@@ -577,6 +663,12 @@ const CONN_TEXT = {
 
 const SESSION_TEXT = { practice: "Practice", qualifying: "Qualifying", race: "Race", warmup: "Warm-up" };
 
+/// "Demo GT car", or "Car 5234 (class 1703)" when the game gives IDs only.
+function carName(car) {
+  const id = (x) => x.replace(/^.*-/, "");
+  return car.name || `Car ${id(car.id)} (class ${car.class_name || id(car.class_id)})`;
+}
+
 /// "RaceRoom 3.6 · Car 5234 (class 1703) · Mount Panorama · Practice", plus what's not available.
 function renderSource(st) {
   const s = st.source;
@@ -588,9 +680,7 @@ function renderSource(st) {
   line.hidden = !s;
   missing.hidden = !s || !st.unavailable.length;
   if (!s) return;
-  const id = (x) => x.replace(/^.*-/, "");
-  const car = s.car && (s.car.name || `Car ${id(s.car.id)} (class ${s.car.class_name || id(s.car.class_id)})`);
-  const parts = [`${s.game} ${s.api_version}`, car, s.track && s.track.name, SESSION_TEXT[s.session]];
+  const parts = [`${s.game} ${s.api_version}`, s.car && carName(s.car), s.track && s.track.name, SESSION_TEXT[s.session]];
   line.textContent = parts.filter(Boolean).join(" · ");
   missing.textContent = `Not available from this game: ${st.unavailable.join("; ")}.`;
 }
@@ -609,6 +699,7 @@ async function pollLive() {
   $("#demo-btn").textContent = st.demo ? "Stop demo" : "Try demo lap";
   $("#tab-dot").className = "live-dot" + (st.demo ? " demo" : st.connection === "driving" ? " on" : "");
   renderSource(st);
+  checkContext(st.source);
 
   // Needed even when the live tab is closed ("Next run" carries them over).
   live.detected = r.detected;

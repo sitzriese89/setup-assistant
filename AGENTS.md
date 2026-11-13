@@ -8,6 +8,9 @@ Scope, order and status are in [docs/roadmap.md](docs/roadmap.md): one GitHub is
 worked one issue per PR. Before picking or starting work, read its Status section and the
 **Now** marker, and run `gh pr list` for what is already in review.
 
+Issues are implemented by background workers, one per issue in its own worktree and PR, with
+this session as coordinator: use the `implement` skill.
+
 ## Ground rules
 
 - `crates/setup-core` stays game- and UI-agnostic. Game specifics go in adapter crates

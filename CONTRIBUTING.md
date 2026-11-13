@@ -124,4 +124,6 @@ command needs a matching branch in `examples/ui_preview.rs`.
 ## Working with AI coding agents
 
 Agents are welcome contributors too. [AGENTS.md](AGENTS.md) has the short version of the
-conventions above; point your agent at it and at ADR.md.
+conventions above; point your agent at it and at ADR.md. With Claude Code, the `implement`
+skill (`.claude/skills/implement/`) runs one background worker per issue, each in its own git
+worktree and PR, and reviews and merges the PRs with you.

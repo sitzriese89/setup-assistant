@@ -21,7 +21,8 @@ Kept up to date by the `sim-test` skill (`.claude/skills/sim-test/SKILL.md`). Re
 | T11 | Demo toggle keeps the run recording | #46 (PR #56) | During a run, switch Try demo lap on and off, then keep driving | The first recording keeps its size; the run continues in a `-2` file |
 | T12 | Removing a problem drops its ticked changes | #48 (PR #58) | In the pits: two problems, tick a change only the second produces, remove the second problem | "Next run" no longer counts the tick, and the change log doesn't list it |
 | T13 | New-session prompt on a car or track change | #44 (PR #67) | With runs in the session, switch car or track in RaceRoom; once, on the first start after updating, expect the one-time question for the old session | The bar asks once above both tabs; Start a new session resets to run 1; Keep this session doesn't ask again for that car and track; switching back never asks |
-| T14 | Every recording gets its JSON sidecar | #43 (PR #68, ADR-21) | Drive two runs with Next run in between, then close the app normally; Claude replays | Each CSV has a `.json` with RaceRoom, car, track and channels, an `end` event whose row count matches the CSV, and `replay` prints the context. Until #6 is merged the last run of a session has no `end` |
+| T14 | Every recording gets its JSON sidecar | #43 (PR #68, ADR-21) | Drive two runs with Next run in between, then close the app normally; Claude replays | Each CSV has a `.json` with RaceRoom, car, track and channels, an `end` event whose row count matches the CSV, and `replay` prints the context. |
+| T15 | Quitting mid-run keeps the whole recording | #6 (PR #70, ADR-22) | Drive, then close the main window mid-run with the overlay open (no Next run first) | The app quits at once; the last CSV is complete and its `.json` has an `end` event matching the CSV's rows; the track map was saved |
 
 ## Verified
 

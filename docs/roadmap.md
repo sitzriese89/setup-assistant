@@ -82,7 +82,7 @@ Missing, stale or broken data is visible and never becomes a measurement.
 | M1.1 Source reports game, API version, car, track and available channels | [#3][3] | Done (#34) |
 | M1.2 Show stale telemetry and unsupported game versions | [#4][4] | Open |
 | M1.3 Crash-safe saving and visible save/recording health | [#5][5] | Open |
-| M1.4 Clean worker shutdown and unique recording IDs | [#6][6] | Open |
+| M1.4 Clean worker shutdown and unique recording IDs | [#6][6] | Done (#70) |
 | M1.5 Measure live polling cost with both windows open · *after the alpha* (recordings show a steady 10 ms interval) | [#7][7] | Open |
 | M1.6 Command parity test between desktop app and ui_preview | [#8][8] | Open |
 | M1.7 Playwright smoke tests for the main workflow · *after the alpha* | [#9][9] | Open |

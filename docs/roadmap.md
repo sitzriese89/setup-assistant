@@ -86,7 +86,7 @@ Missing, stale or broken data is visible and never becomes a measurement.
 | M1.5 Measure live polling cost with both windows open · *after the alpha* (recordings show a steady 10 ms interval) | [#7][7] | Open |
 | M1.6 Command parity test between desktop app and ui_preview | [#8][8] | Open |
 | M1.7 Playwright smoke tests for the main workflow · *after the alpha* | [#9][9] | Open |
-| M1.8 Metadata sidecar with every recording | [#43][43] | Open |
+| M1.8 Metadata sidecar with every recording | [#43][43] | Done (#68) |
 | M1.9 Ask for a new session when the car or track changes (until M2.2) | [#44][44] | Done (#67) |
 
 ## M2 · Sessions and context

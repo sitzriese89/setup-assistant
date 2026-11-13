@@ -1,10 +1,13 @@
 //! Replays a recorded run through the analyzer, for tuning the detectors.
 //!
 //!   cargo run -p setup-core --example replay -- <recording.csv> [understeer_deg_per_g]
+//!
+//! Reads `<recording>.json` next to it when present: missing channels are masked and places
+//! wrap at the start line, as they were live. Older recordings have none.
 
 use std::path::PathBuf;
 
-use setup_core::recording;
+use setup_core::recording::{self, SidecarEvent};
 use setup_core::telemetry::{Analyzer, Thresholds};
 use setup_core::{Phase, RuleBook};
 
@@ -29,6 +32,52 @@ fn main() {
     }
     let samples = imported.samples;
     let mut a = Analyzer::new(thresholds.clone());
+
+    // The sidecar (since M1.8) says what the CSV can't: car, track, channels, events.
+    match recording::read_sidecar(&path) {
+        Ok(Some(side)) => {
+            println!(
+                "recorded with app {} ({}), session {} run {}{}",
+                side.app_version,
+                side.commit.as_deref().unwrap_or("commit unknown"),
+                side.session_id,
+                side.run,
+                if side.demo { ", demo" } else { "" }
+            );
+            if let Some(src) = side.last_source() {
+                let car =
+                    src.car.as_ref().map_or("car unknown".to_string(), |c| c.name.clone().unwrap_or(c.id.clone()));
+                let track = src
+                    .track
+                    .as_ref()
+                    .map_or("track unknown".to_string(), |t| format!("{} ({:.0} m)", t.name, t.length_m));
+                println!("{} {} · {car} · {track} · {:?}", src.game, src.api_version, src.session);
+                a.set_channels(src.channels);
+                a.set_track_length(src.track.as_ref().map(|t| t.length_m));
+                for u in src.channels.unavailable() {
+                    println!("  unavailable: {u}");
+                }
+            }
+            if side.thresholds != Thresholds::default() {
+                println!("  recorded with other thresholds than this build's; the replay uses this build's");
+            }
+            for e in &side.events {
+                let (what, at) = match e {
+                    SidecarEvent::Reset { at } => ("reset by the driver", at),
+                    SidecarEvent::AnalysisRestarted { at } => ("analysis restarted after an error", at),
+                    SidecarEvent::Identity { at, .. } => ("source changed (car, track, session or channels)", at),
+                    SidecarEvent::End { at } => ("end of recording", at),
+                };
+                let time = at.time.map_or("–".to_string(), |t| format!("{t:.1} s"));
+                println!("  row {:>7} ({time}): {what}", at.rows);
+            }
+            if !matches!(side.events.last(), Some(SidecarEvent::End { .. })) {
+                println!("  no end event: the app stopped while recording");
+            }
+        }
+        Ok(None) => println!("no sidecar (older recording): all channels assumed, lap length unknown"),
+        Err(e) => println!("sidecar unreadable ({e}): all channels assumed, lap length unknown"),
+    }
 
     for s in &samples {
         a.push(s);

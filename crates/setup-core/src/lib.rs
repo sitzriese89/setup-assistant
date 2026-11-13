@@ -566,6 +566,13 @@ mod telemetry_tests {
     struct EndlessLaps {
         buffer: Vec<Sample>,
         next: usize,
+        identity: Option<live::SourceIdentity>,
+    }
+
+    impl EndlessLaps {
+        fn new(identity: Option<live::SourceIdentity>) -> Self {
+            Self { buffer: Vec::new(), next: 0, identity }
+        }
     }
 
     impl live::Source for EndlessLaps {
@@ -578,26 +585,84 @@ mod telemetry_tests {
             self.next += 100;
             live::Poll::Samples(self.buffer[self.next - 100..self.next].to_vec())
         }
+        fn identity(&self) -> Option<live::SourceIdentity> {
+            self.identity.clone()
+        }
+    }
+
+    /// Waits up to 20 s for `session`'s status to satisfy `ok`.
+    fn wait_for(session: &live::LiveSession, what: &str, ok: &dyn Fn(&live::LiveStatus) -> bool) -> live::LiveStatus {
+        let rules = RuleBook::builtin();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        loop {
+            let st = session.status(&rules);
+            if ok(&st) {
+                return st;
+            }
+            assert!(std::time::Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn recordings_get_a_sidecar_with_identity_and_events() {
+        use recording::SidecarEvent;
+        let dir = std::env::temp_dir().join(format!("setup-core-sidecar-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut id = demo::identity(demo::track_info());
+        id.game = "Test".into();
+        id.channels.ride_height = false;
+        let session = live::LiveSession::start(Box::new(EndlessLaps::new(Some(id.clone()))), Some(dir.clone()));
+        let st = wait_for(&session, "a recording", &|st| st.report.driving_seconds > 2.0 && st.recording.is_some());
+        let csv = std::path::PathBuf::from(st.recording.unwrap());
+        assert_eq!(recording::sidecar_path(&csv), csv.with_extension("json"));
+
+        let side = recording::read_sidecar(&csv).unwrap().expect("sidecar written with the recording");
+        assert_eq!(side.schema, recording::SIDECAR_SCHEMA);
+        assert_eq!(side.app_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!((side.run, side.demo), (1, false));
+        assert_eq!(side.source.as_ref(), Some(&id), "identity, including the channel mask");
+        assert_eq!(side.thresholds, telemetry::Thresholds::default());
+        assert!(side.events.is_empty(), "{:?}", side.events);
+
+        session.reset();
+        let side = recording::read_sidecar(&csv).unwrap().unwrap();
+        let [SidecarEvent::Reset { at }] = side.events.as_slice() else { panic!("{:?}", side.events) };
+        assert!(at.rows > 0 && at.time.is_some(), "{at:?}");
+
+        session.next_run();
+        let side = recording::read_sidecar(&csv).unwrap().unwrap();
+        let [SidecarEvent::Reset { at: reset }, SidecarEvent::End { at: end }] = side.events.as_slice() else {
+            panic!("{:?}", side.events)
+        };
+        assert!(end.rows >= reset.rows);
+        let rows = recording::read(&csv).unwrap().len() as u64;
+        assert_eq!(rows, end.rows, "the end mark matches the CSV");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn recordings_without_a_sidecar_still_load() {
+        let dir = std::env::temp_dir().join(format!("setup-core-nosidecar-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("session-1-run1.csv");
+        let mut r = recording::Recorder::create(&path).unwrap();
+        demo::lap(0.0).iter().take(10).for_each(|s| r.write(s).unwrap());
+        r.flush().unwrap();
+        drop(r);
+        assert!(recording::read_sidecar(&path).unwrap().is_none());
+        assert_eq!(recording::read(&path).unwrap().len(), 10);
+        std::fs::write(recording::sidecar_path(&path), "{").unwrap();
+        assert!(recording::read_sidecar(&path).is_err(), "a broken sidecar is an error, not silence");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
     fn toggling_the_demo_keeps_the_run_recording() {
         let dir = std::env::temp_dir().join(format!("setup-core-toggle-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let session =
-            live::LiveSession::start(Box::new(EndlessLaps { buffer: Vec::new(), next: 0 }), Some(dir.clone()));
-        let rules = RuleBook::builtin();
-        let wait_for = |what: &str, ok: &dyn Fn(&live::LiveStatus) -> bool| {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-            loop {
-                let st = session.status(&rules);
-                if ok(&st) {
-                    return st;
-                }
-                assert!(std::time::Instant::now() < deadline, "timed out waiting for {what}");
-                std::thread::sleep(std::time::Duration::from_millis(20));
-            }
-        };
+        let session = live::LiveSession::start(Box::new(EndlessLaps::new(None)), Some(dir.clone()));
+        let wait_for = |what: &str, ok: &dyn Fn(&live::LiveStatus) -> bool| wait_for(&session, what, ok);
         let first = wait_for("a recording", &|st| st.report.driving_seconds > 5.0 && st.recording.is_some());
         let first = std::path::PathBuf::from(first.recording.unwrap());
         session.set_demo(true);
@@ -606,7 +671,13 @@ mod telemetry_tests {
         session.set_demo(false);
         let second = wait_for("a new recording", &|st| st.recording.as_deref().is_some_and(|p| p.ends_with("-2.csv")));
         assert!(std::fs::metadata(&first).unwrap().len() >= kept, "first recording was truncated");
-        assert_ne!(std::path::PathBuf::from(second.recording.unwrap()), first);
+        let second = std::path::PathBuf::from(second.recording.unwrap());
+        assert_ne!(second, first);
+        // Each file has its own sidecar; the first one was closed when the demo started.
+        let first_side = recording::read_sidecar(&first).unwrap().expect("first sidecar");
+        assert!(matches!(first_side.events.last(), Some(recording::SidecarEvent::End { .. })));
+        assert!(recording::sidecar_path(&second).to_string_lossy().ends_with("-2.json"));
+        assert!(recording::read_sidecar(&second).unwrap().is_some(), "second sidecar");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

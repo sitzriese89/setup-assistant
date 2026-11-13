@@ -139,19 +139,28 @@ impl TrackMap {
         dir.join(format!("{safe}.json"))
     }
 
-    /// Loads the saved map for this track, or starts a new one.
+    /// Loads the saved map for this track, or starts a new one. A saved map that can't be
+    /// used (unreadable, other lap length, wrong number of bins) is kept as `<file>.bak`
+    /// before the new map replaces it, so corner names and run history aren't lost silently.
     pub fn load_or_new(dir: Option<&Path>, info: TrackInfo) -> Self {
-        if let Some(dir) = dir {
-            if let Ok(text) = std::fs::read_to_string(Self::file(dir, &info.id)) {
-                if let Ok(mut m) = serde_json::from_str::<TrackMap>(&text) {
-                    if (m.info.length_m - info.length_m).abs() < 1.0 {
-                        m.info = info;
-                        return m;
-                    }
-                }
+        let fresh = Self::new(info.clone());
+        let Some(dir) = dir else { return fresh };
+        let path = Self::file(dir, &info.id);
+        let Ok(text) = std::fs::read_to_string(&path) else { return fresh };
+        match serde_json::from_str::<TrackMap>(&text) {
+            Ok(mut m) if (m.info.length_m - info.length_m).abs() < 1.0 && m.bins.len() == fresh.bins.len() => {
+                m.info = info;
+                return m;
             }
+            Ok(_) => eprintln!("track map {} doesn't fit this track, starting a new one", path.display()),
+            Err(e) => eprintln!("track map {} unreadable ({e}), starting a new one", path.display()),
         }
-        Self::new(info)
+        let mut backup = path.clone().into_os_string();
+        backup.push(".bak");
+        if let Err(e) = std::fs::rename(&path, &backup) {
+            eprintln!("couldn't keep the old track map: {e}");
+        }
+        fresh
     }
 
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {

@@ -460,6 +460,61 @@ mod telemetry_tests {
     }
 
     #[test]
+    fn unusable_track_map_is_backed_up_not_trusted() {
+        let dir = std::env::temp_dir().join(format!("setup-core-map-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let info = demo::track_info();
+        // Right length, but no bins: used to panic on the first sample.
+        let broken = format!(
+            r#"{{"info":{{"id":"demo","name":"Demo track","length_m":{}}},"bins":[],"laps":3,"names":{{"1":"Hairpin"}}}}"#,
+            info.length_m
+        );
+        std::fs::write(dir.join("demo.json"), &broken).unwrap();
+        let mut map = track::TrackMap::load_or_new(Some(&dir), info);
+        assert_eq!(map.laps, 0, "a fresh map, not the broken one");
+        for s in demo::lap(0.0).iter().step_by(50) {
+            map.add(s);
+        }
+        assert_eq!(std::fs::read_to_string(dir.join("demo.json.bak")).unwrap(), broken, "old map kept");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Panics on its second poll, then plays a demo lap, 100 samples per poll.
+    struct PanicsOnce {
+        polls: u32,
+        samples: Vec<Sample>,
+        next: usize,
+    }
+
+    impl live::Source for PanicsOnce {
+        fn poll(&mut self) -> live::Poll {
+            self.polls += 1;
+            if self.polls == 2 {
+                panic!("test: source failed once");
+            }
+            let end = (self.next + 100).min(self.samples.len());
+            let chunk = self.samples[self.next..end].to_vec();
+            self.next = end;
+            live::Poll::Samples(chunk)
+        }
+    }
+
+    #[test]
+    fn telemetry_survives_a_panic() {
+        let source = PanicsOnce { polls: 0, samples: demo::lap(0.0), next: 0 };
+        let session = live::LiveSession::start(Box::new(source), None);
+        let rules = RuleBook::builtin();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        // Commands keep working, and analysis carries on after the panic.
+        while session.status(&rules).report.driving_seconds < 5.0 {
+            assert!(std::time::Instant::now() < deadline, "analysis stopped after the panic");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        session.reset();
+    }
+
+    #[test]
     fn live_session_reports_source_and_unavailable_channels() {
         let mut samples = Vec::new();
         let mut t0 = 0.0;

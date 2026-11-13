@@ -388,3 +388,24 @@ masks and wraps places like the live session did. Recordings made earlier have n
 replay as before. A sidecar without an end event means the app stopped while recording
 (clean shutdown is roadmap M1.4). New fields must be optional when read; a change in meaning
 bumps the schema version.
+
+## ADR-22: Stop telemetry explicitly when the app exits
+
+**Context.** The telemetry thread looped forever. On quit the process ended with up to 2 s of
+recording still buffered, the track map up to 30 s behind, and the sidecar without its end
+event (ADR-21), so a normal quit looked like a crash (#6).
+
+**Decision.** `LiveSession::shutdown()` sets a stop flag the thread checks every iteration,
+joins the thread, then adds the current run to the track map, saves the map and closes the
+recording through the same path as Next run (flush, `End` event). The join comes first, so no
+sample can arrive after the end mark. Shutdown is idempotent (the thread handle is taken once,
+under a lock) and tolerates a thread that died of a panic. The Tauri shell calls it on
+`RunEvent::Exit`; closing the main window calls `app.exit(0)`, so an open overlay doesn't keep
+the app (and telemetry) running without its main window. Dropping the last `LiveSession` handle
+also shuts down, as a fallback for tests and tools; the app doesn't rely on it, because Tauri
+may end the process without dropping its state.
+
+**Consequences.** Quitting mid-run counts that run in the map's run history. If the driver
+restarts the app and carries on with the same run number, that run appears twice there; losing
+the driven part entirely seemed worse. A sidecar without `End` now means a crash or a killed
+process. Crash-safe writing of maps and recordings is separate (roadmap M1.3).

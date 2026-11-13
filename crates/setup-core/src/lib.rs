@@ -680,6 +680,86 @@ mod telemetry_tests {
         assert!(recording::read_sidecar(&second).unwrap().is_some(), "second sidecar");
         let _ = std::fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn starting_the_same_run_twice_makes_two_files() {
+        let dir = std::env::temp_dir().join(format!("setup-core-samerun-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let session = live::LiveSession::start(Box::new(EndlessLaps::new(None)), Some(dir.clone()));
+        let first = wait_for(&session, "a recording", &|st| st.report.driving_seconds > 2.0 && st.recording.is_some());
+        let first = std::path::PathBuf::from(first.recording.unwrap());
+        session.start_run(1);
+        let second = wait_for(&session, "a second recording", &|st| {
+            st.recording.as_deref().is_some_and(|p| p.ends_with("-run1-2.csv"))
+        });
+        session.shutdown();
+        let second = std::path::PathBuf::from(second.recording.unwrap());
+        assert!(first.to_string_lossy().ends_with("-run1.csv"), "{first:?}");
+        assert!(!recording::read(&first).unwrap().is_empty(), "first recording kept");
+        assert!(!recording::read(&second).unwrap().is_empty(), "second recording written");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Plays `samples` once, 50 per poll, then reports idle. Sets `dropped` when the
+    /// telemetry thread lets go of it, i.e. when the thread has finished.
+    struct FiniteLaps {
+        samples: Vec<Sample>,
+        next: usize,
+        dropped: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl live::Source for FiniteLaps {
+        fn poll(&mut self) -> live::Poll {
+            if self.next >= self.samples.len() {
+                return live::Poll::Idle;
+            }
+            let end = (self.next + 50).min(self.samples.len());
+            let chunk = self.samples[self.next..end].to_vec();
+            self.next = end;
+            live::Poll::Samples(chunk)
+        }
+    }
+
+    impl Drop for FiniteLaps {
+        fn drop(&mut self) {
+            self.dropped.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn shutdown_joins_the_worker_and_closes_the_recording() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        let dir = std::env::temp_dir().join(format!("setup-core-shutdown-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let samples = demo::lap(0.0);
+        let total = samples.len();
+        let dropped = Arc::new(AtomicBool::new(false));
+        let source = FiniteLaps { samples, next: 0, dropped: dropped.clone() };
+        let session = live::LiveSession::start(Box::new(source), Some(dir.clone()));
+        // Wait until the whole lap has been read, then shut down straight away, before the
+        // periodic flush (every 2 s) would have written the end of the CSV.
+        let st = wait_for(&session, "the whole lap", &|st| {
+            st.recording.is_some() && st.connection == live::Connection::Connected
+        });
+        let csv = std::path::PathBuf::from(st.recording.unwrap());
+        session.shutdown();
+        assert!(dropped.load(Ordering::SeqCst), "telemetry thread finished before shutdown returned");
+
+        assert_eq!(recording::read(&csv).unwrap().len(), total, "every sample written so far is in the CSV");
+        let side = recording::read_sidecar(&csv).unwrap().expect("sidecar");
+        let [recording::SidecarEvent::End { at }] = side.events.as_slice() else { panic!("{:?}", side.events) };
+        assert_eq!(at.rows, total as u64);
+
+        // Harmless a second time, from another handle, and commands still answer.
+        session.clone().shutdown();
+        session.shutdown();
+        let side = recording::read_sidecar(&csv).unwrap().unwrap();
+        assert_eq!(side.events.len(), 1, "one end event: {:?}", side.events);
+        let st = session.status(&RuleBook::builtin());
+        assert!(st.recording.is_none(), "{:?}", st.recording);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
 
 #[cfg(test)]

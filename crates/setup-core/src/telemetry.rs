@@ -402,6 +402,9 @@ struct Detectors {
     bottoming: Episode,
 }
 
+/// Throttle above which a corner (or a slide just after one) counts as the exit.
+const EXIT_THROTTLE: f32 = 0.6;
+
 type EventKey = (String, Option<Phase>, CornerSpeed);
 
 pub struct Analyzer {
@@ -540,7 +543,7 @@ impl Analyzer {
             }
         } else if s.brake > 0.05 {
             Phase::Entry
-        } else if s.throttle > 0.6 {
+        } else if s.throttle > EXIT_THROTTLE {
             Phase::Exit
         } else {
             Phase::Mid
@@ -703,9 +706,11 @@ impl Analyzer {
             None => None,
         };
 
-        // Turn the corner phase into one the rules understand.
+        // Turn the corner phase into one the rules understand. Below cornering force on the
+        // throttle (a slide late on the exit) is still the exit.
         let corner_phase = match phase {
             Some(Phase::Braking) => Phase::Entry,
+            Some(Phase::Straight) if s.throttle > EXIT_THROTTLE => Phase::Exit,
             Some(Phase::Straight) | None => Phase::Mid,
             Some(p) => p,
         };

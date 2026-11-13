@@ -596,6 +596,23 @@ h3.sub { font-size: 14px; margin: 18px 0 10px; display: flex; align-items: basel
   animation: pop 0.2s ease-out;
 }
 .run-confirm p { margin: 0 0 8px; }
+.context-prompt {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 16px 28px 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 204, 77, 0.08);
+  border: 1px solid rgba(255, 204, 77, 0.3);
+  font-size: 14px;
+  line-height: 1.45;
+  color: #f3e3b5;
+  animation: pop 0.2s ease-out;
+}
+.context-prompt[hidden] { display: none; }
+.context-prompt p { margin: 0; flex: 1; min-width: 240px; }
 .toast {
   margin: -8px 0 16px;
   padding: 10px 14px;

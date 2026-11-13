@@ -35,6 +35,15 @@
     </div>
   </header>
 
+  <!-- Shown when the game's car or track isn't the one this session started with. -->
+  <div class="context-prompt" id="context-prompt" hidden>
+    <p id="context-prompt-text"></p>
+    <div class="live-actions">
+      <button class="ghost strong" id="context-new">Start a new session</button>
+      <button class="ghost" id="context-keep">Keep this session</button>
+    </div>
+  </div>
+
   <main class="layout">
     <!-- Left: describe the problem -->
     <section class="panel builder">

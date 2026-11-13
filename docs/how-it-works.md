@@ -95,6 +95,13 @@ fixed, and live detection starts fresh for the changed car. From then on suggest
 If a "fixed" problem shows up again (detected or added by hand), it stops counting as fixed.
 The session is kept across app restarts; **New session** clears it.
 
+A session remembers the car and track it started with (the demo counts as its own car and
+track). When the game reports a different one while the session has runs, problems or ticked
+changes in it, a bar above both tabs asks whether to start a new session. **Keep this session**
+doesn't ask again for that car and track; an empty session just switches without asking.
+Nothing is asked until the game reports both car and track. This stops when sessions are kept
+per car and track (roadmap M2.2).
+
 ## Overlay
 
 "Show overlay" in the Live tab opens a small always-on-top window with the balance needle,
